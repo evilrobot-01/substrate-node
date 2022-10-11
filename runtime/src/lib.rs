@@ -39,7 +39,7 @@ pub use frame_support::{
 	StorageValue,
 };
 pub use frame_system::Call as SystemCall;
-use frame_system::EnsureRoot;
+use frame_system::{EnsureRoot, EnsureSigned};
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::{ConstFeeMultiplier, CurrencyAdapter, Multiplier};
@@ -47,8 +47,9 @@ use pallet_transaction_payment::{ConstFeeMultiplier, CurrencyAdapter, Multiplier
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
-/// Import the dex pallet
+/// Import the dex and marketplace pallets
 pub use pallet_dex;
+pub use pallet_marketplace;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -348,6 +349,51 @@ impl pallet_dex::Config for Runtime {
 	}
 }
 
+// Configure uniques pallet for runtime
+impl pallet_uniques::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type CollectionId = CollectionId;
+	type ItemId = ItemId;
+	type Currency = Balances;
+	type ForceOrigin = EnsureRoot<AccountId>;
+	type CreateOrigin = AsEnsureOriginWithArg<EnsureSigned<AccountId>>;
+	type Locker = ();
+	type CollectionDeposit = ();
+	type ItemDeposit = ();
+	type MetadataDepositBase = ();
+	type AttributeDepositBase = ();
+	type DepositPerByte = ();
+	type StringLimit = AssetMaxLength;
+	type KeyLimit = ();
+	type ValueLimit = ();
+	type WeightInfo = ();
+}
+
+// Configure marketplace pallet for runtime
+impl pallet_marketplace::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	// Identifier type for a fungible asset
+	type AssetId = AssetId;
+	// Balance inspection for fungible assets
+	type Assets = Assets;
+	/// Identifier type for a collection of items
+	type CollectionId = CollectionId;
+	// Auto-swapping to facilitate buying/selling using any asset/token.
+	type DEX = proxies::Dex;
+	/// The type used to identify a unique item within a collection
+	type ItemId = ItemId;
+	/// Identifier of the native asset identifier (proxy between native token and asset)
+	type NativeAssetId = NativeAssetId;
+	// Native currency: for swaps between native token and other assets
+	type NativeCurrency = Balances;
+	// Balance inspection for non-fungible assets
+	type Uniques = Uniques;
+	// Determines whether an asset exists
+	fn exists(id: Self::AssetId) -> bool {
+		Assets::maybe_total_supply(id).is_some()
+	}
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub struct Runtime
@@ -367,6 +413,8 @@ construct_runtime!(
 		// Include additional pallets to satisfy required functionality
 		Assets: pallet_assets,
 		DEX: pallet_dex,
+		Uniques: pallet_uniques,
+		Marketplace: pallet_marketplace
 	}
 );
 
@@ -635,6 +683,41 @@ impl_runtime_apis! {
 		/// * `other` - The required asset type.
 		fn price(amount: Balance, asset: AssetId, other: AssetId) -> Balance {
 			DEX::price(amount, asset, other).unwrap_or(Balance::default())
+		}
+	}
+}
+
+mod proxies {
+	use frame_support::dispatch::DispatchResult;
+	use sp_runtime::DispatchError;
+	use super::*;
+
+	pub struct Dex;
+	impl pallet_marketplace::traits::Price for Dex {
+		type AssetId = AssetId;
+		type Balance = Balance;
+
+		fn price(
+			amount: Self::Balance,
+			asset: Self::AssetId,
+			other: Self::AssetId,
+		) -> Result<Self::Balance, DispatchError> {
+			DEX::price(amount, asset, other)
+		}
+	}
+	impl pallet_marketplace::traits::Swap<<Runtime as frame_system::Config>::AccountId> for Dex {
+		type AssetId = AssetId;
+		type Balance = Balance;
+
+		fn swap(
+			amount: Self::Balance,
+			asset: Self::AssetId,
+			other: Self::AssetId,
+			buyer: &<Runtime as frame_system::Config>::AccountId,
+		) -> DispatchResult {
+			<DEX as pallet_dex::traits::Swap<<Runtime as frame_system::Config>::AccountId>>::swap(
+				amount, asset, other, buyer,
+			)
 		}
 	}
 }
