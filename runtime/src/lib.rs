@@ -612,6 +612,17 @@ impl_runtime_apis! {
 		}
 	}
 
+	impl pallet_dex_runtime_api::DexApi<Block, Balance, AssetId> for Runtime {
+		/// Calculates the output amount of asset `other`, given an input `amount` and `asset` type.
+		/// # Arguments
+		/// * `amount` - An amount to be valued.
+		/// * `asset` - The asset type of the amount.
+		/// * `other` - The required asset type.
+		fn price(amount: Balance, asset: AssetId, other: AssetId) -> Balance {
+			DEX::price(amount, asset, other).unwrap_or(Balance::default())
+		}
+	}
+
 	#[cfg(feature = "runtime-benchmarks")]
 	impl frame_benchmarking::Benchmark<Block> for Runtime {
 		fn benchmark_metadata(extra: bool) -> (
@@ -671,18 +682,6 @@ impl_runtime_apis! {
 			// NOTE: intentional unwrap: we don't want to propagate the error backwards, and want to
 			// have a backtrace here.
 			Executive::try_execute_block(block, state_root_check, select).expect("execute-block failed")
-		}
-	}
-
-	#[cfg(feature = "try-runtime")]
-	impl pallet_dex_api::DexApi<Block> for Runtime {
-		/// Calculates the output amount of asset `other`, given an input `amount` and `asset` type.
-		/// # Arguments
-		/// * `amount` - An amount to be valued.
-		/// * `asset` - The asset type of the amount.
-		/// * `other` - The required asset type.
-		fn price(amount: Balance, asset: AssetId, other: AssetId) -> Balance {
-			DEX::price(amount, asset, other).unwrap_or(Balance::default())
 		}
 	}
 }

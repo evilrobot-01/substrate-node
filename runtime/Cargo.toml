@@ -50,6 +50,7 @@ frame-system-benchmarking = { version = "4.0.0-dev", default-features = false, g
 # Custom dependences
 pallet-assets = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.30" }
 pallet-dex = { version = "0.1.0", default-features = false, git = "https://github.com/evilrobot-01/substrate-pallets", branch = "dex" }
+pallet-dex-runtime-api = { version = "0.1.0", default-features = false, git = "https://github.com/evilrobot-01/substrate-pallets", branch = "dex" }
 pallet-marketplace = { version = "0.1.0", default-features = false, git = "https://github.com/evilrobot-01/substrate-pallets", branch = "marketplace" }
 pallet-uniques = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.30" }
 
@@ -73,6 +74,7 @@ std = [
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-dex/std",
+	"pallet-dex-runtime-api/std",
 	"pallet-marketplace/std",
 	"pallet-grandpa/std",
 	"pallet-randomness-collective-flip/std",
