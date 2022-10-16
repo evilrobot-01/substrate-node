@@ -298,9 +298,9 @@ mod learning_session {
 		type MaxSubAccounts = MaxSubAccounts;
 		type MaxAdditionalFields = MaxAdditionalFields;
 		type MaxRegistrars = MaxRegistrars;
-		type Slashed = ();// kitchensink-runtime: Treasury;
-		type ForceOrigin = EnsureRoot<AccountId>; // kitchensink-runtime: EnsureRootOrHalfCouncil;
-		type RegistrarOrigin = EnsureRoot<AccountId>; // kitchensink-runtime: EnsureRootOrHalfCouncil;
+		type Slashed = (); // LS: kitchensink-runtime uses Treasury
+		type ForceOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime uses EnsureRootOrHalfCouncil
+		type RegistrarOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime uses EnsureRootOrHalfCouncil
 		type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
 	}
 

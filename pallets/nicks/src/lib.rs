@@ -139,6 +139,7 @@ pub mod pallet {
 		pub fn set_name(origin: OriginFor<T>, name: Vec<u8>) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 
+			// LS: Ensure requested name satisfies configured min/max length
 			let bounded_name: BoundedVec<_, _> =
 				name.try_into().map_err(|()| Error::<T>::TooLong)?;
 			ensure!(bounded_name.len() >= T::MinLength::get() as usize, Error::<T>::TooShort);
@@ -147,6 +148,7 @@ pub mod pallet {
 				Self::deposit_event(Event::<T>::NameChanged { who: sender.clone() });
 				deposit
 			} else {
+				// LS: Take deposit for reserving name
 				let deposit = T::ReservationFee::get();
 				T::Currency::reserve(&sender, deposit)?;
 				Self::deposit_event(Event::<T>::NameSet { who: sender.clone() });
@@ -171,8 +173,10 @@ pub mod pallet {
 		pub fn clear_name(origin: OriginFor<T>) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 
+			// LS: remove name/deposit of sender from storage
 			let deposit = <NameOf<T>>::take(&sender).ok_or(Error::<T>::Unnamed)?.1;
 
+			// LS: return deposit to sender
 			let err_amount = T::Currency::unreserve(&sender, deposit);
 			debug_assert!(err_amount.is_zero());
 
@@ -195,8 +199,10 @@ pub mod pallet {
 		/// # </weight>
 		#[pallet::weight(70_000_000)]
 		pub fn kill_name(origin: OriginFor<T>, target: AccountIdLookupOf<T>) -> DispatchResult {
+			// LS: ensure origin authorised to forcibly set name, based on configuration (Root)
 			T::ForceOrigin::ensure_origin(origin)?;
 
+			// LS: remove name associated with supplied target and slash associated reserved deposit
 			// Figure out who we're meant to be clearing.
 			let target = T::Lookup::lookup(target)?;
 			// Grab their deposit (and check that they have one).
@@ -226,10 +232,12 @@ pub mod pallet {
 			target: AccountIdLookupOf<T>,
 			name: Vec<u8>,
 		) -> DispatchResult {
+			// LS: ensure origin authorised to forcibly set name, based on configuration (Root)
 			T::ForceOrigin::ensure_origin(origin)?;
 
+			// LS: set supplied name for supplied target, taking deposit from target account
 			let bounded_name: BoundedVec<_, _> =
-				name.try_into().map_err(|()| Error::<T>::TooLong)?;
+				name.try_into().map_err(|()| Error::<T>::TooLong)?; // LS: doesn't check MinLength as set_name does!
 			let target = T::Lookup::lookup(target)?;
 			let deposit = <NameOf<T>>::get(&target).map(|x| x.1).unwrap_or_else(Zero::zero);
 			<NameOf<T>>::insert(&target, (bounded_name, deposit));
