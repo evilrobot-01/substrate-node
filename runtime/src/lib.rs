@@ -290,37 +290,52 @@ mod learning_session {
 
 	// Based on kitchensink-runtime at https://github.com/paritytech/substrate/blob/0ee03277c33b6334ddba7434e014fa637dcb6107/bin/node/runtime/src/lib.rs#L1311-L1324
 	impl pallet_identity::Config for Runtime {
+		/// The overarching event type.
 		type RuntimeEvent = RuntimeEvent;
-		type Currency = Balances;
+		/// The currency trait.
+		type Currency = Balances; // LS: Balances pallet dependency
+		/// The amount held on deposit for a registered identity
 		type BasicDeposit = BasicDeposit;
+		/// The amount held on deposit per additional field for a registered identity.
 		type FieldDeposit = FieldDeposit;
+		/// The amount held on deposit for a registered sub-account. This should account for the fact
+		/// that one storage item's value will increase by the size of an account ID, and there will
+		/// be another trie item whose value is the size of an account ID plus 32 bytes.
 		type SubAccountDeposit = SubAccountDeposit;
+		/// The maximum number of sub-accounts allowed per identified account.
 		type MaxSubAccounts = MaxSubAccounts;
+		/// Maximum number of additional fields that may be stored in an ID. Needed to bound the I/O
+		/// required to access an identity, but can be pretty high.
 		type MaxAdditionalFields = MaxAdditionalFields;
+		/// Maximum number of registrars allowed in the system. Needed to bound the complexity
+		/// of, e.g., updating judgements.
 		type MaxRegistrars = MaxRegistrars;
+		/// What to do with slashed funds.
 		type Slashed = (); // LS: kitchensink-runtime uses Treasury
-		type ForceOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime uses EnsureRootOrHalfCouncil
-		type RegistrarOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime uses EnsureRootOrHalfCouncil
+		/// The origin which may forcibly set or remove a name. Root can always do this.
+		type ForceOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime uses EnsureRootOrHalfCouncil (pallet-collective)
+		/// The origin which may add or remove registrars. Root can always do this.
+		type RegistrarOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime uses EnsureRootOrHalfCouncil (pallet-collective)
+		/// Weight information for extrinsics in this pallet.
 		type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
 	}
 
 	// Based on https://docs.substrate.io/tutorials/work-with-pallets/add-a-pallet/#implement-the-configuration-for-nicks
 	impl pallet_nicks::Config for Runtime {
-		// The ubiquitous event type.
+		/// The overarching event type.
 		type RuntimeEvent = RuntimeEvent;
-		// The Balances pallet implements the ReservableCurrency trait.
-		// `Balances` is defined in `construct_runtime!` macro.
-		type Currency = Balances;
-		// Set ReservationFee to a value.
+		/// The currency trait.
+		// The Balances pallet implements the ReservableCurrency trait. `Balances` is defined in `construct_runtime!` macro.
+		type Currency = Balances; // LS: Balances pallet dependency
+		/// Reservation fee.
 		type ReservationFee = ConstU128<100>;
-		// No action is taken when deposits are forfeited.
-		type Slashed = ();
-		// Configure the FRAME System Root origin as the Nick pallet admin.
-		// https://paritytech.github.io/substrate/master/frame_system/enum.RawOrigin.html#variant.Root
-		type ForceOrigin = EnsureRoot<AccountId>;
-		// Set MinLength of nick name to a desired value.
+		/// What to do with slashed funds.
+		type Slashed = (); // No action is taken when deposits are forfeited.
+		/// The origin which may forcibly set or remove a name. Root can always do this.
+		type ForceOrigin = EnsureRoot<AccountId>; // Configure the FRAME System Root origin as the Nick pallet admin: https://paritytech.github.io/substrate/master/frame_system/enum.RawOrigin.html#variant.Root
+		/// The minimum length a name may be.
 		type MinLength = ConstU32<8>;
-		// Set MaxLength of nick name to a desired value.
+		/// The maximum length a name may be.
 		type MaxLength = ConstU32<32>;
 	}
 }
