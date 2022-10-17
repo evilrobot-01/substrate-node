@@ -110,6 +110,8 @@ pub mod pallet {
 
 	/// The lookup table for names.
 	#[pallet::storage]
+	/// LS: Name/deposit stored by account
+	/// LS: TwoX64 hashing algorithm used - account identifier typically public key
 	pub(super) type NameOf<T: Config> =
 		StorageMap<_, Twox64Concat, T::AccountId, (BoundedVec<u8, T::MaxLength>, BalanceOf<T>)>;
 
@@ -136,7 +138,8 @@ pub mod pallet {
 		/// - One event.
 		/// # </weight>
 		#[pallet::weight(50_000_000)]
-		pub fn set_name(origin: OriginFor<T>, name: Vec<u8>) -> DispatchResult {
+		pub fn set_name(origin: OriginFor<T>, name: Vec<u8>) -> DispatchResult // LS: name parameter to BoundedVec<u8>?!
+		{
 			let sender = ensure_signed(origin)?;
 
 			// LS: Ensure requested name satisfies configured min/max length
@@ -144,11 +147,13 @@ pub mod pallet {
 				name.try_into().map_err(|()| Error::<T>::TooLong)?;
 			ensure!(bounded_name.len() >= T::MinLength::get() as usize, Error::<T>::TooShort);
 
+			// LS: Process deposit
 			let deposit = if let Some((_, deposit)) = <NameOf<T>>::get(&sender) {
+				// LS: existing deposit held, simply amend name. Perhaps check if reservation fee increased due to runtime upgrade?
 				Self::deposit_event(Event::<T>::NameChanged { who: sender.clone() });
 				deposit
 			} else {
-				// LS: Take deposit for reserving name
+				// LS: Reserve deposit based on configured reservation fee
 				let deposit = T::ReservationFee::get();
 				T::Currency::reserve(&sender, deposit)?;
 				Self::deposit_event(Event::<T>::NameSet { who: sender.clone() });
@@ -176,7 +181,7 @@ pub mod pallet {
 			// LS: remove name/deposit of sender from storage
 			let deposit = <NameOf<T>>::take(&sender).ok_or(Error::<T>::Unnamed)?.1;
 
-			// LS: return deposit to sender
+			// LS: unreserve deposit
 			let err_amount = T::Currency::unreserve(&sender, deposit);
 			debug_assert!(err_amount.is_zero());
 
@@ -199,10 +204,10 @@ pub mod pallet {
 		/// # </weight>
 		#[pallet::weight(70_000_000)]
 		pub fn kill_name(origin: OriginFor<T>, target: AccountIdLookupOf<T>) -> DispatchResult {
-			// LS: ensure origin authorised to forcibly set name, based on configuration (Root)
+			// LS: ensure origin of call authorised to forcibly set name, based on runtime configuration (Root)
 			T::ForceOrigin::ensure_origin(origin)?;
 
-			// LS: remove name associated with supplied target and slash associated reserved deposit
+			// LS: remove name associated with supplied target account, slash associated deposit
 			// Figure out who we're meant to be clearing.
 			let target = T::Lookup::lookup(target)?;
 			// Grab their deposit (and check that they have one).
@@ -232,12 +237,12 @@ pub mod pallet {
 			target: AccountIdLookupOf<T>,
 			name: Vec<u8>,
 		) -> DispatchResult {
-			// LS: ensure origin authorised to forcibly set name, based on configuration (Root)
+			// LS: ensure origin of call authorised to forcibly set name, based on runtime configuration (Root)
 			T::ForceOrigin::ensure_origin(origin)?;
 
-			// LS: set supplied name for supplied target, taking deposit from target account
+			// LS: set supplied name for supplied target, taking no deposit
 			let bounded_name: BoundedVec<_, _> =
-				name.try_into().map_err(|()| Error::<T>::TooLong)?; // LS: doesn't check MinLength as set_name does!
+				name.try_into().map_err(|()| Error::<T>::TooLong)?; // LS: doesn't check MinLength as `set_name` does!
 			let target = T::Lookup::lookup(target)?;
 			let deposit = <NameOf<T>>::get(&target).map(|x| x.1).unwrap_or_else(Zero::zero);
 			<NameOf<T>>::insert(&target, (bounded_name, deposit));
