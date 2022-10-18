@@ -41,9 +41,9 @@ impl pallet_identity::Config for Runtime {
     /// What to do with slashed funds.
     type Slashed = (); // LS: kitchensink-runtime, Kusama, Polkadot all use Treasury here
     /// The origin which may forcibly set or remove a name. Root can always do this.
-    type ForceOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime uses EnsureRootOrHalfCouncil (pallet-collective), Kusama uses
+    type ForceOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime, Kusama, Polkadot all use EnsureRootOrHalfCouncil (pallet-collective) here
     /// The origin which may add or remove registrars. Root can always do this.
-    type RegistrarOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime uses EnsureRootOrHalfCouncil (pallet-collective)
+    type RegistrarOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime, Kusama, Polkadot all use EnsureRootOrHalfCouncil (pallet-collective) here
     /// Weight information for extrinsics in this pallet.
     type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
 }
@@ -61,7 +61,7 @@ impl pallet_nicks::Config for Runtime {
     type Slashed = (); // No action is taken when deposits are forfeited.
     /// The origin which may forcibly set or remove a name. Root can always do this.
     type ForceOrigin = EnsureRoot<AccountId>; // Configure the FRAME System Root origin as the Nick pallet admin: https://paritytech.github.io/substrate/master/frame_system/enum.RawOrigin.html#variant.Root
-    // LS: Bound name length (8-32) as on-chain storage expensive
+    // LS: Bound name length (8-32) - on-chain storage expensive
     /// The minimum length a name may be.
     type MinLength = ConstU32<8>;
     /// The maximum length a name may be.

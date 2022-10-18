@@ -133,7 +133,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxAdditionalFields: Get<u32>;
 
-		/// Maxmimum number of registrars allowed in the system. Needed to bound the complexity
+		/// Maximum number of registrars allowed in the system. Needed to bound the complexity
 		/// of, e.g., updating judgements.
 		#[pallet::constant]
 		type MaxRegistrars: Get<u32>;
@@ -162,6 +162,7 @@ pub mod pallet {
 	#[pallet::getter(fn identity)]
 	pub(super) type IdentityOf<T: Config> = StorageMap<
 		_,
+		// LS: Identity registration per account. TwoX used as AccountId assumed to be secure hash (runtime config)
 		Twox64Concat,
 		T::AccountId,
 		Registration<BalanceOf<T>, T::MaxRegistrars, T::MaxAdditionalFields>,
@@ -173,6 +174,8 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn super_of)]
 	pub(super) type SuperOf<T: Config> =
+		// LS: stores identities (names) of sub-accounts by their respective account identifier, as set by parent account
+		// LS: i.e. used to show a name and parent account of a sub-account #namingishard
 		StorageMap<_, Blake2_128Concat, T::AccountId, (T::AccountId, Data), OptionQuery>;
 
 	/// Alternative "sub" identities of this account.
@@ -184,6 +187,7 @@ pub mod pallet {
 	#[pallet::getter(fn subs_of)]
 	pub(super) type SubsOf<T: Config> = StorageMap<
 		_,
+		// LS: Deposit and sub-accounts per account. TwoX used as AccountId assumed to be secure hash (runtime config)
 		Twox64Concat,
 		T::AccountId,
 		(BalanceOf<T>, BoundedVec<T::AccountId, T::MaxSubAccounts>),
@@ -198,6 +202,7 @@ pub mod pallet {
 	#[pallet::getter(fn registrars)]
 	pub(super) type Registrars<T: Config> = StorageValue<
 		_,
+		// LS: Registrar information by 'index', including identity fields which registrar will make judgements on
 		BoundedVec<Option<RegistrarInfo<BalanceOf<T>, T::AccountId>>, T::MaxRegistrars>,
 		ValueQuery,
 	>;
@@ -217,6 +222,7 @@ pub mod pallet {
 		/// No identity found.
 		NoIdentity,
 		/// Sticky judgement.
+		// LS: judgement pending (deposit paid) or deemed erroneous by registrar
 		StickyJudgement,
 		/// Judgement given.
 		JudgementGiven,
@@ -269,6 +275,7 @@ pub mod pallet {
 	#[pallet::call]
 	/// Identity pallet declaration.
 	impl<T: Config> Pallet<T> {
+
 		/// Add a registrar to the system.
 		///
 		/// The dispatch origin for this call must be `T::RegistrarOrigin`.
@@ -282,17 +289,21 @@ pub mod pallet {
 		/// - One storage mutation (codec `O(R)`).
 		/// - One event.
 		/// # </weight>
+		// LS: default weight based on max number of registrars
 		#[pallet::weight(T::WeightInfo::add_registrar(T::MaxRegistrars::get()))]
 		pub fn add_registrar(
 			origin: OriginFor<T>,
 			account: AccountIdLookupOf<T>,
 		) -> DispatchResultWithPostInfo {
+			// LS: Ensure origin authorised to add registrar
 			T::RegistrarOrigin::ensure_origin(origin)?;
 			let account = T::Lookup::lookup(account)?;
 
+			// LS: push new registrar information to storage, returning resulting index within set
 			let (i, registrar_count) = <Registrars<T>>::try_mutate(
 				|registrars| -> Result<(RegistrarIndex, usize), DispatchError> {
 					registrars
+						// LS: Registrar initialised with no fee/fields: registrar calls set_fee and set_fields
 						.try_push(Some(RegistrarInfo {
 							account,
 							fee: Zero::zero(),
@@ -305,6 +316,7 @@ pub mod pallet {
 
 			Self::deposit_event(Event::RegistrarAdded { registrar_index: i });
 
+			// LS: post-dispatch weight correction based on registrar count
 			Ok(Some(T::WeightInfo::add_registrar(registrar_count as u32)).into())
 		}
 
@@ -327,6 +339,7 @@ pub mod pallet {
 		/// - One storage mutation (codec-read `O(X' + R)`, codec-write `O(X + R)`).
 		/// - One event.
 		/// # </weight>
+		// LS: default weight based on max number of registrars/additional fields
 		#[pallet::weight( T::WeightInfo::set_identity(
 			T::MaxRegistrars::get(), // R
 			T::MaxAdditionalFields::get(), // X
@@ -336,10 +349,12 @@ pub mod pallet {
 			info: Box<IdentityInfo<T::MaxAdditionalFields>>,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
+			// LS: ensure number of additional fields within bounds, calculate total field deposit accordingly
 			let extra_fields = info.additional.len() as u32;
 			ensure!(extra_fields <= T::MaxAdditionalFields::get(), Error::<T>::TooManyFields);
 			let fd = <BalanceOf<T>>::from(extra_fields) * T::FieldDeposit::get();
 
+			// LS: Create identity registration from supplied info , retaining any existing 'sticky' judgements
 			let mut id = match <IdentityOf<T>>::get(&sender) {
 				Some(mut id) => {
 					// Only keep non-positive judgements.
@@ -354,6 +369,7 @@ pub mod pallet {
 				},
 			};
 
+			// LS: reserve deposit, adjusting based on extra fields / BasicDeposit change (runtime upgrade)
 			let old_deposit = id.deposit;
 			id.deposit = T::BasicDeposit::get() + fd;
 			if id.deposit > old_deposit {
@@ -364,10 +380,12 @@ pub mod pallet {
 				debug_assert!(err_amount.is_zero());
 			}
 
+			// LS: update identity storage
 			let judgements = id.judgements.len();
 			<IdentityOf<T>>::insert(&sender, id);
 			Self::deposit_event(Event::IdentitySet { who: sender });
 
+			// LS: post-dispatch weight correction based on actual judgements and additional fields
 			Ok(Some(T::WeightInfo::set_identity(
 				judgements as u32, // R
 				extra_fields,      // X
@@ -402,6 +420,7 @@ pub mod pallet {
 		// N storage items for N sub accounts. Right now the weight on this function
 		// is a large overestimate due to the fact that it could potentially write
 		// to 2 x T::MaxSubAccounts::get().
+		// LS: default weight based on max number of sub-accounts + number of supplied sub-accounts
 		#[pallet::weight(T::WeightInfo::set_subs_old(T::MaxSubAccounts::get()) // P: Assume max sub accounts removed.
 			.saturating_add(T::WeightInfo::set_subs_new(subs.len() as u32)) // S: Assume all subs are new.
 		)]
@@ -410,19 +429,23 @@ pub mod pallet {
 			subs: Vec<(T::AccountId, Data)>,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
+			// LS: ensure identity already defined for sender and requested number of sub-accounts within bounds
 			ensure!(<IdentityOf<T>>::contains_key(&sender), Error::<T>::NotFound);
 			ensure!(
 				subs.len() <= T::MaxSubAccounts::get() as usize,
 				Error::<T>::TooManySubAccounts
 			);
 
+			// LS: Get existing sub-accounts and calculate deposit based on requested number of sub-accounts
 			let (old_deposit, old_ids) = <SubsOf<T>>::get(&sender);
 			let new_deposit = T::SubAccountDeposit::get() * <BalanceOf<T>>::from(subs.len() as u32);
 
+			// LS: Ensure requested sub-accounts not already claimed (by another account)
 			let not_other_sub =
 				subs.iter().filter_map(|i| SuperOf::<T>::get(&i.0)).all(|i| i.0 == sender);
 			ensure!(not_other_sub, Error::<T>::AlreadyClaimed);
 
+			// LS: reserve deposit, adjusting based on requested sub-accounts / SubAccountDeposit change (runtime upgrade)
 			if old_deposit < new_deposit {
 				T::Currency::reserve(&sender, new_deposit - old_deposit)?;
 			} else if old_deposit > new_deposit {
@@ -431,6 +454,7 @@ pub mod pallet {
 			}
 			// do nothing if they're equal.
 
+			// LS: apply changes to sub-account *identities* - tracks allocated names of sub-accounts along with sender
 			for s in old_ids.iter() {
 				<SuperOf<T>>::remove(s);
 			}
@@ -441,12 +465,14 @@ pub mod pallet {
 			}
 			let new_subs = ids.len();
 
+			// LS: apply changes to sub-account *lists* - total deposit held and list of associated accounts
 			if ids.is_empty() {
 				<SubsOf<T>>::remove(&sender);
 			} else {
 				<SubsOf<T>>::insert(&sender, (new_deposit, ids));
 			}
 
+			// LS: post-dispatch weight correction based on actual sub-accounts removed/added
 			Ok(Some(
 				T::WeightInfo::set_subs_old(old_ids.len() as u32) // P: Real number of old accounts removed.
 					// S: New subs added
@@ -473,6 +499,7 @@ pub mod pallet {
 		/// - `2` storage reads and `S + 2` storage deletions.
 		/// - One event.
 		/// # </weight>
+		// LS: default weight based on max number of registrars/sub-accounts and additional fields
 		#[pallet::weight(T::WeightInfo::clear_identity(
 			T::MaxRegistrars::get(), // R
 			T::MaxSubAccounts::get(), // S
@@ -481,18 +508,23 @@ pub mod pallet {
 		pub fn clear_identity(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 
+			// LS: remove sender identity and sub-account information from storage
 			let (subs_deposit, sub_ids) = <SubsOf<T>>::take(&sender);
 			let id = <IdentityOf<T>>::take(&sender).ok_or(Error::<T>::NotNamed)?;
+			// LS: calculate total deposit taken (identity deposit + pending judgements + subs)
 			let deposit = id.total_deposit() + subs_deposit;
+			// LS: remove corresponding sub-account identity information
 			for sub in sub_ids.iter() {
 				<SuperOf<T>>::remove(sub);
 			}
 
+			// LS: return total deposit
 			let err_amount = T::Currency::unreserve(&sender, deposit);
 			debug_assert!(err_amount.is_zero());
 
 			Self::deposit_event(Event::IdentityCleared { who: sender, deposit });
 
+			// LS: post-dispatch weight correction based on actual judgements, sub-identities, additional fields
 			Ok(Some(T::WeightInfo::clear_identity(
 				id.judgements.len() as u32,      // R
 				sub_ids.len() as u32,            // S
@@ -524,6 +556,7 @@ pub mod pallet {
 		/// - Storage: 1 read `O(R)`, 1 mutate `O(X + R)`.
 		/// - One event.
 		/// # </weight>
+		// LS: default weight based on max number of registrars/additional fields
 		#[pallet::weight(T::WeightInfo::request_judgement(
 			T::MaxRegistrars::get(), // R
 			T::MaxAdditionalFields::get(), // X
@@ -534,37 +567,46 @@ pub mod pallet {
 			#[pallet::compact] max_fee: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
+			// LS: get registrar by index
 			let registrars = <Registrars<T>>::get();
 			let registrar = registrars
 				.get(reg_index as usize)
 				.and_then(Option::as_ref)
 				.ok_or(Error::<T>::EmptyIndex)?;
+			// LS: ensure specified max_fee satisfies registrar fee and get identity of sender
 			ensure!(max_fee >= registrar.fee, Error::<T>::FeeChanged);
 			let mut id = <IdentityOf<T>>::get(&sender).ok_or(Error::<T>::NoIdentity)?;
 
+			// LS: add judgement request to identity, reserving fee for registrar judgement
 			let item = (reg_index, Judgement::FeePaid(registrar.fee));
 			match id.judgements.binary_search_by_key(&reg_index, |x| x.0) {
 				Ok(i) =>
+					// LS: ensure no 'sticky' judgement (pending or erroneous) already exists for registrar
 					if id.judgements[i].1.is_sticky() {
 						return Err(Error::<T>::StickyJudgement.into())
 					} else {
+						// LS: overwrite existing judgement
 						id.judgements[i] = item
 					},
 				Err(i) =>
+					// LS: insert judgement request at registrar index
 					id.judgements.try_insert(i, item).map_err(|_| Error::<T>::TooManyRegistrars)?,
 			}
 
 			T::Currency::reserve(&sender, registrar.fee)?;
 
+			// LS: update identity storage with requested judgements and emit event
 			let judgements = id.judgements.len();
 			let extra_fields = id.info.additional.len();
 			<IdentityOf<T>>::insert(&sender, id);
 
+			// LS: registrar could listen for events pertaining to their index, perhaps adding to queue
 			Self::deposit_event(Event::JudgementRequested {
 				who: sender,
 				registrar_index: reg_index,
 			});
 
+			// LS: post-dispatch weight correction based on actual number of judgements/fields
 			Ok(Some(T::WeightInfo::request_judgement(judgements as u32, extra_fields as u32))
 				.into())
 		}
@@ -586,6 +628,7 @@ pub mod pallet {
 		/// - One storage mutation `O(R + X)`.
 		/// - One event
 		/// # </weight>
+		// LS: default weight based on max number of registrars/additional fields
 		#[pallet::weight(T::WeightInfo::cancel_request(
 			T::MaxRegistrars::get(), // R
 			T::MaxAdditionalFields::get(), // X
@@ -595,29 +638,35 @@ pub mod pallet {
 			reg_index: RegistrarIndex,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
+			// LS: lookup registered identity of sender
 			let mut id = <IdentityOf<T>>::get(&sender).ok_or(Error::<T>::NoIdentity)?;
 
+			// LS: Check for pending judgement for registrar
 			let pos = id
 				.judgements
 				.binary_search_by_key(&reg_index, |x| x.0)
 				.map_err(|_| Error::<T>::NotFound)?;
+			// LS: remove from identity if judgement is pending (FeePaid)
 			let fee = if let Judgement::FeePaid(fee) = id.judgements.remove(pos).1 {
 				fee
 			} else {
 				return Err(Error::<T>::JudgementGiven.into())
 			};
 
+			// LS: unreserve registrar fee and update storage with identity
 			let err_amount = T::Currency::unreserve(&sender, fee);
 			debug_assert!(err_amount.is_zero());
 			let judgements = id.judgements.len();
 			let extra_fields = id.info.additional.len();
 			<IdentityOf<T>>::insert(&sender, id);
 
+			// LS: registrar could use to remove from their queue
 			Self::deposit_event(Event::JudgementUnrequested {
 				who: sender,
 				registrar_index: reg_index,
 			});
 
+			// LS: post-dispatch weight correction based on actual number of judgements/fields
 			Ok(Some(T::WeightInfo::cancel_request(judgements as u32, extra_fields as u32)).into())
 		}
 
@@ -634,6 +683,7 @@ pub mod pallet {
 		/// - One storage mutation `O(R)`.
 		/// - Benchmark: 7.315 + R * 0.329 µs (min squares analysis)
 		/// # </weight>
+		// LS: default weight based on max number of registrars
 		#[pallet::weight(T::WeightInfo::set_fee(T::MaxRegistrars::get()))] // R
 		pub fn set_fee(
 			origin: OriginFor<T>,
@@ -642,10 +692,12 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
+			// LS: amend registrar at supplied index, returning registrar count
 			let registrars = <Registrars<T>>::mutate(|rs| -> Result<usize, DispatchError> {
 				rs.get_mut(index as usize)
 					.and_then(|x| x.as_mut())
 					.and_then(|r| {
+						// LS: Ensure registrar owned by account before setting fee
 						if r.account == who {
 							r.fee = fee;
 							Some(())
@@ -656,6 +708,8 @@ pub mod pallet {
 					.ok_or_else(|| DispatchError::from(Error::<T>::InvalidIndex))?;
 				Ok(rs.len())
 			})?;
+
+			// LS: post-dispatch weight correction based on registrar count
 			Ok(Some(T::WeightInfo::set_fee(registrars as u32)).into()) // R
 		}
 
@@ -672,6 +726,7 @@ pub mod pallet {
 		/// - One storage mutation `O(R)`.
 		/// - Benchmark: 8.823 + R * 0.32 µs (min squares analysis)
 		/// # </weight>
+		// LS: default weight based on max number of registrars
 		#[pallet::weight(T::WeightInfo::set_account_id(T::MaxRegistrars::get()))] // R
 		pub fn set_account_id(
 			origin: OriginFor<T>,
@@ -681,6 +736,7 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			let new = T::Lookup::lookup(new)?;
 
+			// LS: amend registrar account (used by registrar themselves)
 			let registrars = <Registrars<T>>::mutate(|rs| -> Result<usize, DispatchError> {
 				rs.get_mut(index as usize)
 					.and_then(|x| x.as_mut())
@@ -695,6 +751,7 @@ pub mod pallet {
 					.ok_or_else(|| DispatchError::from(Error::<T>::InvalidIndex))?;
 				Ok(rs.len())
 			})?;
+			// LS: post-dispatch weight correction based on registrar count
 			Ok(Some(T::WeightInfo::set_account_id(registrars as u32)).into()) // R
 		}
 
@@ -711,6 +768,7 @@ pub mod pallet {
 		/// - One storage mutation `O(R)`.
 		/// - Benchmark: 7.464 + R * 0.325 µs (min squares analysis)
 		/// # </weight>
+		// LS: default weight based on max number of registrars
 		#[pallet::weight(T::WeightInfo::set_fields(T::MaxRegistrars::get()))] // R
 		pub fn set_fields(
 			origin: OriginFor<T>,
@@ -719,10 +777,12 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
+			// LS: amend registrar at supplied index, returning registrar count
 			let registrars = <Registrars<T>>::mutate(|rs| -> Result<usize, DispatchError> {
 				rs.get_mut(index as usize)
 					.and_then(|x| x.as_mut())
 					.and_then(|r| {
+						// LS: Ensure registrar owned by account before setting identity fields
 						if r.account == who {
 							r.fields = fields;
 							Some(())
@@ -733,6 +793,8 @@ pub mod pallet {
 					.ok_or_else(|| DispatchError::from(Error::<T>::InvalidIndex))?;
 				Ok(rs.len())
 			})?;
+
+			// LS: post-dispatch weight correction based on registrar count
 			Ok(Some(T::WeightInfo::set_fields(
 				registrars as u32, // R
 			))
@@ -759,6 +821,7 @@ pub mod pallet {
 		/// - Storage: 1 read `O(R)`, 1 mutate `O(R + X)`.
 		/// - One event.
 		/// # </weight>
+		// LS: default weight based on max number of registrars/additional fields
 		#[pallet::weight(T::WeightInfo::provide_judgement(
 			T::MaxRegistrars::get(), // R
 			T::MaxAdditionalFields::get(), // X
@@ -772,7 +835,8 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 			let target = T::Lookup::lookup(target)?;
-			ensure!(!judgement.has_deposit(), Error::<T>::InvalidJudgement);
+			ensure!(!judgement.has_deposit(), Error::<T>::InvalidJudgement); // LS: a pending judgement (FeePaid) cannot be provided
+			// LS: ensures registrar exists and sender matches account, along with ensuring identity exists for target
 			<Registrars<T>>::get()
 				.get(reg_index as usize)
 				.and_then(Option::as_ref)
@@ -780,14 +844,17 @@ pub mod pallet {
 				.ok_or(Error::<T>::InvalidIndex)?;
 			let mut id = <IdentityOf<T>>::get(&target).ok_or(Error::<T>::InvalidTarget)?;
 
+			// LS: uses hash of identity information to ensure judgement is being provided on expected data
 			if T::Hashing::hash_of(&id.info) != identity {
 				return Err(Error::<T>::JudgementForDifferentIdentity.into())
 			}
 
+			// LS: provides final judgement for registrar
 			let item = (reg_index, judgement);
 			match id.judgements.binary_search_by_key(&reg_index, |x| x.0) {
 				Ok(position) => {
 					if let Judgement::FeePaid(fee) = id.judgements[position].1 {
+						// LS: repatriates reserved judgement fee from requesting identity to registrar
 						let _ = T::Currency::repatriate_reserved(
 							&target,
 							&sender,
@@ -795,19 +862,23 @@ pub mod pallet {
 							BalanceStatus::Free,
 						);
 					}
+					// LS: overwrites judgement, even if 'sticky' (erroneous)
 					id.judgements[position] = item
 				},
+				// LS: adds judgement - without receiving a fee
 				Err(position) => id
 					.judgements
 					.try_insert(position, item)
 					.map_err(|_| Error::<T>::TooManyRegistrars)?,
 			}
 
+			// LS: update identity storage with result of judgement
 			let judgements = id.judgements.len();
 			let extra_fields = id.info.additional.len();
 			<IdentityOf<T>>::insert(&target, id);
 			Self::deposit_event(Event::JudgementGiven { target, registrar_index: reg_index });
 
+			// LS: post-dispatch weight correction based on actual number of judgements/fields
 			Ok(Some(T::WeightInfo::provide_judgement(judgements as u32, extra_fields as u32))
 				.into())
 		}
@@ -831,6 +902,7 @@ pub mod pallet {
 		/// - `S + 2` storage mutations.
 		/// - One event.
 		/// # </weight>
+		// LS: default weight based on max number of registrars, sub-accounts, additional fields
 		#[pallet::weight(T::WeightInfo::kill_identity(
 			T::MaxRegistrars::get(), // R
 			T::MaxSubAccounts::get(), // S
@@ -840,10 +912,12 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			target: AccountIdLookupOf<T>,
 		) -> DispatchResultWithPostInfo {
+			// LS: Ensure origin authorised to kill identity
 			T::ForceOrigin::ensure_origin(origin)?;
 
 			// Figure out who we're meant to be clearing.
 			let target = T::Lookup::lookup(target)?;
+			// LS: remove identity and sub-accounts, calculating total deposit
 			// Grab their deposit (and check that they have one).
 			let (subs_deposit, sub_ids) = <SubsOf<T>>::take(&target);
 			let id = <IdentityOf<T>>::take(&target).ok_or(Error::<T>::NotNamed)?;
@@ -851,11 +925,13 @@ pub mod pallet {
 			for sub in sub_ids.iter() {
 				<SuperOf<T>>::remove(sub);
 			}
+			// LS: Slash target's deposit
 			// Slash their deposit from them.
 			T::Slashed::on_unbalanced(T::Currency::slash_reserved(&target, deposit).0);
 
 			Self::deposit_event(Event::IdentityKilled { who: target, deposit });
 
+			// LS: post-dispatch weight correction based on actual number of judgements, sub-accounts, fields
 			Ok(Some(T::WeightInfo::kill_identity(
 				id.judgements.len() as u32,      // R
 				sub_ids.len() as u32,            // S
@@ -877,6 +953,7 @@ pub mod pallet {
 			sub: AccountIdLookupOf<T>,
 			data: Data,
 		) -> DispatchResult {
+			// LS: add sub-account, provided identity exists and sub-account claimed elsewhere
 			let sender = ensure_signed(origin)?;
 			let sub = T::Lookup::lookup(sub)?;
 			ensure!(IdentityOf::<T>::contains_key(&sender), Error::<T>::NoIdentity);
@@ -890,15 +967,17 @@ pub mod pallet {
 					sub_ids.len() < T::MaxSubAccounts::get() as usize,
 					Error::<T>::TooManySubAccounts
 				);
+				// LS: Reserve deposit
 				let deposit = T::SubAccountDeposit::get();
 				T::Currency::reserve(&sender, deposit)?;
 
+				// LS: store sub-account identity, add to list of sub-accounts and update total deposit
 				SuperOf::<T>::insert(&sub, (sender.clone(), data));
 				sub_ids.try_push(sub.clone()).expect("sub ids length checked above; qed");
 				*subs_deposit = subs_deposit.saturating_add(deposit);
 
 				Self::deposit_event(Event::SubIdentityAdded { sub, main: sender.clone(), deposit });
-				Ok(())
+				Ok(()) // LS: no post-dispatch weight correction
 			})
 		}
 
@@ -912,12 +991,13 @@ pub mod pallet {
 			sub: AccountIdLookupOf<T>,
 			data: Data,
 		) -> DispatchResult {
+			// LS: amends the name of a sub-account identity, provided identity exists and sub-account associated
 			let sender = ensure_signed(origin)?;
 			let sub = T::Lookup::lookup(sub)?;
 			ensure!(IdentityOf::<T>::contains_key(&sender), Error::<T>::NoIdentity);
 			ensure!(SuperOf::<T>::get(&sub).map_or(false, |x| x.0 == sender), Error::<T>::NotOwned);
 			SuperOf::<T>::insert(&sub, (sender, data));
-			Ok(())
+			Ok(()) // LS: no post-dispatch weight correction
 		}
 
 		/// Remove the given account from the sender's subs.
@@ -929,21 +1009,23 @@ pub mod pallet {
 		/// sub identity of `sub`.
 		#[pallet::weight(T::WeightInfo::remove_sub(T::MaxSubAccounts::get()))]
 		pub fn remove_sub(origin: OriginFor<T>, sub: AccountIdLookupOf<T>) -> DispatchResult {
+			// LS: removes a sub-account, returning the associated deposit, provided identity exists and sub-account associated
 			let sender = ensure_signed(origin)?;
 			ensure!(IdentityOf::<T>::contains_key(&sender), Error::<T>::NoIdentity);
 			let sub = T::Lookup::lookup(sub)?;
 			let (sup, _) = SuperOf::<T>::get(&sub).ok_or(Error::<T>::NotSub)?;
 			ensure!(sup == sender, Error::<T>::NotOwned);
-			SuperOf::<T>::remove(&sub);
+			SuperOf::<T>::remove(&sub); // LS: remove sub-account identity
 			SubsOf::<T>::mutate(&sup, |(ref mut subs_deposit, ref mut sub_ids)| {
 				sub_ids.retain(|x| x != &sub);
+				// LS: subtract sub-account deposit from sub-account total deposit and unreserve
 				let deposit = T::SubAccountDeposit::get().min(*subs_deposit);
 				*subs_deposit -= deposit;
 				let err_amount = T::Currency::unreserve(&sender, deposit);
 				debug_assert!(err_amount.is_zero());
 				Self::deposit_event(Event::SubIdentityRemoved { sub, main: sender, deposit });
 			});
-			Ok(())
+			Ok(()) // LS: no post-dispatch weight correction
 		}
 
 		/// Remove the sender as a sub-account.
@@ -959,11 +1041,13 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::quit_sub(T::MaxSubAccounts::get()))]
 		pub fn quit_sub(origin: OriginFor<T>) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
+			// LS: allow sub-account to opt-out, provided a sub-account identity has been associated with it (see note above)
 			let (sup, _) = SuperOf::<T>::take(&sender).ok_or(Error::<T>::NotSub)?;
 			SubsOf::<T>::mutate(&sup, |(ref mut subs_deposit, ref mut sub_ids)| {
 				sub_ids.retain(|x| x != &sender);
 				let deposit = T::SubAccountDeposit::get().min(*subs_deposit);
 				*subs_deposit -= deposit;
+				// LS: sub-account deposit is repatriated to the sub-account (sender) rather than parent/super account
 				let _ =
 					T::Currency::repatriate_reserved(&sup, &sender, deposit, BalanceStatus::Free);
 				Self::deposit_event(Event::SubIdentityRevoked {
@@ -972,7 +1056,7 @@ pub mod pallet {
 					deposit,
 				});
 			});
-			Ok(())
+			Ok(()) // LS: no post-dispatch weight correction
 		}
 	}
 }

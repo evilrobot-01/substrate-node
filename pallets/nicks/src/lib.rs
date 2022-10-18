@@ -110,8 +110,8 @@ pub mod pallet {
 
 	/// The lookup table for names.
 	#[pallet::storage]
-	/// LS: Name/deposit stored by account
-	/// LS: TwoX64 hashing algorithm used - account identifier typically public key
+	// LS: Name/deposit stored by account
+	// LS: TwoX64 hashing algorithm used - account identifier typically public key
 	pub(super) type NameOf<T: Config> =
 		StorageMap<_, Twox64Concat, T::AccountId, (BoundedVec<u8, T::MaxLength>, BalanceOf<T>)>;
 

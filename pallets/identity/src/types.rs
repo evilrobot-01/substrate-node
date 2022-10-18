@@ -288,8 +288,7 @@ impl TypeInfo for IdentityFields {
 #[cfg_attr(test, derive(frame_support::DefaultNoBound))]
 #[scale_info(skip_type_params(FieldLimit))]
 pub struct IdentityInfo<FieldLimit: Get<u32>> {
-	/// Additional fields of the identity that are not catered for with the struct's explicit
-	/// fields.
+	/// Additional fields of the identity that are not catered for with the struct's explicit fields.
 	pub additional: BoundedVec<(Data, Data), FieldLimit>,
 
 	/// A reasonable display name for the controller of the account. This should be whatever it is
@@ -297,6 +296,7 @@ pub struct IdentityInfo<FieldLimit: Get<u32>> {
 	/// reasonable context.
 	///
 	/// Stored as UTF-8.
+	// LS: Data enum shows various types of data stored, 32-bytes at most
 	pub display: Data,
 
 	/// The full legal name in the local jurisdiction of the entity. This might be a bit
@@ -380,12 +380,14 @@ pub struct Registration<
 > {
 	/// Judgements from the registrars on this identity. Stored ordered by `RegistrarIndex`. There
 	/// may be only a single judgement from each registrar.
+	// LS: Judgement by registrar, where judgement is attestation over information accuracy
 	pub judgements: BoundedVec<(RegistrarIndex, Judgement<Balance>), MaxJudgements>,
 
 	/// Amount held on deposit for this information.
 	pub deposit: Balance,
 
 	/// Information on the identity.
+	// LS: Actual identity information registered
 	pub info: IdentityInfo<MaxAdditionalFields>,
 }
 
@@ -423,6 +425,7 @@ pub struct RegistrarInfo<
 	AccountId: Encode + Decode + Clone + Debug + Eq + PartialEq,
 > {
 	/// The account of the registrar.
+	// LS: Multiple registrars *could* be associated with an account
 	pub account: AccountId,
 
 	/// Amount required to be given to the registrar for them to provide judgement.
@@ -430,6 +433,7 @@ pub struct RegistrarInfo<
 
 	/// Relevant fields for this registrar. Registrar judgements are limited to attestations on
 	/// these fields.
+	// LS: Bit flags of various identity fields which registrar offers attestations for
 	pub fields: IdentityFields,
 }
 
