@@ -3760,6 +3760,7 @@ dependencies = [
  "frame-system",
  "jsonrpsee",
  "node-template-runtime",
+ "pallet-dex-rpc",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "sc-basic-authorship",
@@ -3803,12 +3804,14 @@ dependencies = [
  "frame-system-benchmarking",
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
+ "pallet-assets",
  "pallet-aura",
  "pallet-balances",
+ "pallet-dex",
+ "pallet-dex-rpc-runtime-api",
  "pallet-grandpa",
  "pallet-randomness-collective-flip",
  "pallet-sudo",
- "pallet-template",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
@@ -3974,6 +3977,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-assets"
+version = "4.0.0-dev"
+source = "git+https://github.com/paritytech/substrate.git?branch=polkadot-v0.9.30#a3ed0119c45cdd0d571ad34e5b3ee7518c8cef8d"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-aura"
 version = "4.0.0-dev"
 source = "git+https://github.com/paritytech/substrate.git?branch=polkadot-v0.9.30#a3ed0119c45cdd0d571ad34e5b3ee7518c8cef8d"
@@ -4017,6 +4034,44 @@ dependencies = [
  "scale-info",
  "sp-runtime",
  "sp-std",
+]
+
+[[package]]
+name = "pallet-dex"
+version = "0.0.1"
+source = "git+https://github.com/evilrobot-01/substrate-dex?branch=upgrade-v0.9.30#a3bc3a062cfdc926dcc71b676d699f240edcad3f"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-assets",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-dex-rpc"
+version = "0.0.1"
+source = "git+https://github.com/evilrobot-01/substrate-dex?branch=upgrade-v0.9.30#a3bc3a062cfdc926dcc71b676d699f240edcad3f"
+dependencies = [
+ "jsonrpsee",
+ "pallet-dex-rpc-runtime-api",
+ "parity-scale-codec",
+ "sp-api",
+ "sp-blockchain",
+ "sp-runtime",
+]
+
+[[package]]
+name = "pallet-dex-rpc-runtime-api"
+version = "0.0.1"
+source = "git+https://github.com/evilrobot-01/substrate-dex?branch=upgrade-v0.9.30#a3bc3a062cfdc926dcc71b676d699f240edcad3f"
+dependencies = [
+ "pallet-dex",
+ "parity-scale-codec",
+ "sp-api",
+ "sp-runtime",
 ]
 
 [[package]]
@@ -4089,20 +4144,6 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
-]
-
-[[package]]
-name = "pallet-template"
-version = "4.0.0-dev"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-core",
- "sp-io",
- "sp-runtime",
 ]
 
 [[package]]

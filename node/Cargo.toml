@@ -51,6 +51,7 @@ sp-block-builder = { version = "4.0.0-dev", git = "https://github.com/paritytech
 sc-basic-authorship = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.30" }
 substrate-frame-rpc-system = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.30" }
 pallet-transaction-payment-rpc = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.30" }
+pallet-dex-rpc = { version = "0.0.1", default-features = false, git = "https://github.com/evilrobot-01/substrate-dex", branch = "upgrade-v0.9.30" }
 
 # These dependencies are used for runtime benchmarking
 frame-benchmarking = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.30" }

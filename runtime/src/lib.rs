@@ -44,9 +44,9 @@ use pallet_transaction_payment::{ConstFeeMultiplier, CurrencyAdapter, Multiplier
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
-
-/// Import the template pallet.
-pub use pallet_template;
+use frame_support::PalletId;
+use frame_system::EnsureRoot;
+use sp_runtime::traits::Identity;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -270,9 +270,45 @@ impl pallet_sudo::Config for Runtime {
 	type RuntimeCall = RuntimeCall;
 }
 
-/// Configure the pallet-template in pallets/template.
-impl pallet_template::Config for Runtime {
+pub type AssetBalance = Balance;
+pub type AssetId = u32;
+
+impl pallet_assets::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	type Balance = AssetBalance;
+	type AssetId = AssetId;
+	type Currency = Balances;
+	type ForceOrigin = EnsureRoot<AccountId>;
+	type AssetDeposit = ConstU128<1>;
+	type AssetAccountDeposit = ConstU128<10>;
+	type MetadataDepositBase = ConstU128<1>;
+	type MetadataDepositPerByte = ConstU128<1>;
+	type ApprovalDeposit = ConstU128<1>;
+	type StringLimit = ConstU32<50>;
+	type Freezer = ();
+	type Extra = ();
+	type WeightInfo = ();
+}
+
+parameter_types! {
+    pub const DexPalletId: PalletId = PalletId(*b"dex_mock");
+}
+
+impl pallet_dex::Config for Runtime {
+	type PalletId = DexPalletId;
+	type RuntimeEvent = RuntimeEvent;
+	type Currency = Balances;
+	type AssetBalance = AssetBalance;
+	type AssetToCurrencyBalance = Identity;
+	type CurrencyToAssetBalance = Identity;
+	type AssetId = AssetId;
+	type Assets = Assets;
+	type AssetRegistry = Assets;
+	type WeightInfo = ();
+	// Provider fee is 0.3%
+	type ProviderFeeNumerator = ConstU128<3>;
+	type ProviderFeeDenominator = ConstU128<1000>;
+	type MinDeposit = ConstU128<1>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -291,8 +327,8 @@ construct_runtime!(
 		Balances: pallet_balances,
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
-		// Include the custom logic from the pallet-template in the runtime.
-		TemplateModule: pallet_template,
+		Assets: pallet_assets,
+		Dex: pallet_dex,
 	}
 );
 
@@ -339,7 +375,7 @@ mod benches {
 		[frame_system, SystemBench::<Runtime>]
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
-		[pallet_template, TemplateModule]
+		[pallet_dex, DEX]
 	);
 }
 
@@ -490,6 +526,36 @@ impl_runtime_apis! {
 			TransactionPayment::query_call_fee_details(call, len)
 		}
 	}
+
+	impl pallet_dex_rpc_runtime_api::DexApi<Block, AssetId, Balance, AssetBalance> for Runtime {
+        fn get_currency_to_asset_input_price(
+            asset_id: AssetId,
+            currency_amount: Balance
+        ) -> pallet_dex_rpc_runtime_api::RpcResult<AssetBalance> {
+            Dex::get_currency_to_asset_input_price(asset_id, currency_amount)
+        }
+
+        fn get_currency_to_asset_output_price(
+            asset_id: AssetId,
+            token_amount: AssetBalance
+        ) -> pallet_dex_rpc_runtime_api::RpcResult<Balance> {
+            Dex::get_currency_to_asset_output_price(asset_id, token_amount)
+        }
+
+        fn get_asset_to_currency_input_price(
+            asset_id: AssetId,
+            token_amount: AssetBalance
+        ) -> pallet_dex_rpc_runtime_api::RpcResult<Balance> {
+            Dex::get_asset_to_currency_input_price(asset_id, token_amount)
+        }
+
+        fn get_asset_to_currency_output_price(
+            asset_id: AssetId,
+            currency_amount: Balance
+        ) -> pallet_dex_rpc_runtime_api::RpcResult<AssetBalance> {
+            Dex::get_asset_to_currency_output_price(asset_id, currency_amount)
+        }
+    }
 
 	#[cfg(feature = "runtime-benchmarks")]
 	impl frame_benchmarking::Benchmark<Block> for Runtime {
