@@ -339,7 +339,6 @@ pub mod pallet {
 		/// - One storage mutation (codec-read `O(X' + R)`, codec-write `O(X + R)`).
 		/// - One event.
 		/// # </weight>
-		// LS: default weight based on max number of registrars/additional fields
 		#[pallet::weight( T::WeightInfo::set_identity(
 			T::MaxRegistrars::get(), // R
 			T::MaxAdditionalFields::get(), // X
@@ -354,7 +353,7 @@ pub mod pallet {
 			ensure!(extra_fields <= T::MaxAdditionalFields::get(), Error::<T>::TooManyFields);
 			let fd = <BalanceOf<T>>::from(extra_fields) * T::FieldDeposit::get();
 
-			// LS: Create identity registration from supplied info , retaining any existing 'sticky' judgements
+			// LS: Create identity registration from supplied info, retaining any existing 'sticky' judgements
 			let mut id = match <IdentityOf<T>>::get(&sender) {
 				Some(mut id) => {
 					// Only keep non-positive judgements.
@@ -385,7 +384,6 @@ pub mod pallet {
 			<IdentityOf<T>>::insert(&sender, id);
 			Self::deposit_event(Event::IdentitySet { who: sender });
 
-			// LS: post-dispatch weight correction based on actual judgements and additional fields
 			Ok(Some(T::WeightInfo::set_identity(
 				judgements as u32, // R
 				extra_fields,      // X
@@ -420,7 +418,6 @@ pub mod pallet {
 		// N storage items for N sub accounts. Right now the weight on this function
 		// is a large overestimate due to the fact that it could potentially write
 		// to 2 x T::MaxSubAccounts::get().
-		// LS: default weight based on max number of sub-accounts + number of supplied sub-accounts
 		#[pallet::weight(T::WeightInfo::set_subs_old(T::MaxSubAccounts::get()) // P: Assume max sub accounts removed.
 			.saturating_add(T::WeightInfo::set_subs_new(subs.len() as u32)) // S: Assume all subs are new.
 		)]
@@ -460,6 +457,7 @@ pub mod pallet {
 			}
 			let mut ids = BoundedVec::<T::AccountId, T::MaxSubAccounts>::default();
 			for (id, name) in subs {
+				// LS: add named sub-accounts
 				<SuperOf<T>>::insert(&id, (sender.clone(), name));
 				ids.try_push(id).expect("subs length is less than T::MaxSubAccounts; qed");
 			}
@@ -472,7 +470,6 @@ pub mod pallet {
 				<SubsOf<T>>::insert(&sender, (new_deposit, ids));
 			}
 
-			// LS: post-dispatch weight correction based on actual sub-accounts removed/added
 			Ok(Some(
 				T::WeightInfo::set_subs_old(old_ids.len() as u32) // P: Real number of old accounts removed.
 					// S: New subs added
@@ -499,7 +496,6 @@ pub mod pallet {
 		/// - `2` storage reads and `S + 2` storage deletions.
 		/// - One event.
 		/// # </weight>
-		// LS: default weight based on max number of registrars/sub-accounts and additional fields
 		#[pallet::weight(T::WeightInfo::clear_identity(
 			T::MaxRegistrars::get(), // R
 			T::MaxSubAccounts::get(), // S
@@ -524,7 +520,6 @@ pub mod pallet {
 
 			Self::deposit_event(Event::IdentityCleared { who: sender, deposit });
 
-			// LS: post-dispatch weight correction based on actual judgements, sub-identities, additional fields
 			Ok(Some(T::WeightInfo::clear_identity(
 				id.judgements.len() as u32,      // R
 				sub_ids.len() as u32,            // S
@@ -556,7 +551,6 @@ pub mod pallet {
 		/// - Storage: 1 read `O(R)`, 1 mutate `O(X + R)`.
 		/// - One event.
 		/// # </weight>
-		// LS: default weight based on max number of registrars/additional fields
 		#[pallet::weight(T::WeightInfo::request_judgement(
 			T::MaxRegistrars::get(), // R
 			T::MaxAdditionalFields::get(), // X
@@ -606,7 +600,6 @@ pub mod pallet {
 				registrar_index: reg_index,
 			});
 
-			// LS: post-dispatch weight correction based on actual number of judgements/fields
 			Ok(Some(T::WeightInfo::request_judgement(judgements as u32, extra_fields as u32))
 				.into())
 		}
@@ -628,7 +621,6 @@ pub mod pallet {
 		/// - One storage mutation `O(R + X)`.
 		/// - One event
 		/// # </weight>
-		// LS: default weight based on max number of registrars/additional fields
 		#[pallet::weight(T::WeightInfo::cancel_request(
 			T::MaxRegistrars::get(), // R
 			T::MaxAdditionalFields::get(), // X
@@ -666,7 +658,6 @@ pub mod pallet {
 				registrar_index: reg_index,
 			});
 
-			// LS: post-dispatch weight correction based on actual number of judgements/fields
 			Ok(Some(T::WeightInfo::cancel_request(judgements as u32, extra_fields as u32)).into())
 		}
 
@@ -683,7 +674,6 @@ pub mod pallet {
 		/// - One storage mutation `O(R)`.
 		/// - Benchmark: 7.315 + R * 0.329 µs (min squares analysis)
 		/// # </weight>
-		// LS: default weight based on max number of registrars
 		#[pallet::weight(T::WeightInfo::set_fee(T::MaxRegistrars::get()))] // R
 		pub fn set_fee(
 			origin: OriginFor<T>,
@@ -709,7 +699,6 @@ pub mod pallet {
 				Ok(rs.len())
 			})?;
 
-			// LS: post-dispatch weight correction based on registrar count
 			Ok(Some(T::WeightInfo::set_fee(registrars as u32)).into()) // R
 		}
 
@@ -768,7 +757,6 @@ pub mod pallet {
 		/// - One storage mutation `O(R)`.
 		/// - Benchmark: 7.464 + R * 0.325 µs (min squares analysis)
 		/// # </weight>
-		// LS: default weight based on max number of registrars
 		#[pallet::weight(T::WeightInfo::set_fields(T::MaxRegistrars::get()))] // R
 		pub fn set_fields(
 			origin: OriginFor<T>,
@@ -794,7 +782,6 @@ pub mod pallet {
 				Ok(rs.len())
 			})?;
 
-			// LS: post-dispatch weight correction based on registrar count
 			Ok(Some(T::WeightInfo::set_fields(
 				registrars as u32, // R
 			))
@@ -821,7 +808,6 @@ pub mod pallet {
 		/// - Storage: 1 read `O(R)`, 1 mutate `O(R + X)`.
 		/// - One event.
 		/// # </weight>
-		// LS: default weight based on max number of registrars/additional fields
 		#[pallet::weight(T::WeightInfo::provide_judgement(
 			T::MaxRegistrars::get(), // R
 			T::MaxAdditionalFields::get(), // X
@@ -831,6 +817,7 @@ pub mod pallet {
 			#[pallet::compact] reg_index: RegistrarIndex,
 			target: AccountIdLookupOf<T>,
 			judgement: Judgement<BalanceOf<T>>,
+			// LS: note identity hash
 			identity: T::Hash,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
@@ -878,7 +865,6 @@ pub mod pallet {
 			<IdentityOf<T>>::insert(&target, id);
 			Self::deposit_event(Event::JudgementGiven { target, registrar_index: reg_index });
 
-			// LS: post-dispatch weight correction based on actual number of judgements/fields
 			Ok(Some(T::WeightInfo::provide_judgement(judgements as u32, extra_fields as u32))
 				.into())
 		}
@@ -902,7 +888,6 @@ pub mod pallet {
 		/// - `S + 2` storage mutations.
 		/// - One event.
 		/// # </weight>
-		// LS: default weight based on max number of registrars, sub-accounts, additional fields
 		#[pallet::weight(T::WeightInfo::kill_identity(
 			T::MaxRegistrars::get(), // R
 			T::MaxSubAccounts::get(), // S
@@ -931,7 +916,6 @@ pub mod pallet {
 
 			Self::deposit_event(Event::IdentityKilled { who: target, deposit });
 
-			// LS: post-dispatch weight correction based on actual number of judgements, sub-accounts, fields
 			Ok(Some(T::WeightInfo::kill_identity(
 				id.judgements.len() as u32,      // R
 				sub_ids.len() as u32,            // S
