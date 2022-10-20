@@ -22,7 +22,7 @@ impl pallet_identity::Config for Runtime {
     /// The overarching event type.
     type RuntimeEvent = RuntimeEvent;
     /// The currency trait.
-    type Currency = Balances; // LS: Balances pallet dependency via ReservableCurrency trait
+    type Currency = Balances; // LS: Balances pallet via ReservableCurrency trait
     /// The amount held on deposit for a registered identity
     type BasicDeposit = BasicDeposit;
     /// The amount held on deposit per additional field for a registered identity.
@@ -54,7 +54,7 @@ impl pallet_nicks::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     /// The currency trait.
     // The Balances pallet implements the ReservableCurrency trait. `Balances` is defined in `construct_runtime!` macro.
-    type Currency = Balances; // LS: Balances pallet dependency via ReservableCurrency trait
+    type Currency = Balances; // LS: Balances pallet via ReservableCurrency trait
     /// Reservation fee.
     type ReservationFee = ConstU128<100>;
     /// What to do with slashed funds.
@@ -66,4 +66,54 @@ impl pallet_nicks::Config for Runtime {
     type MinLength = ConstU32<8>;
     /// The maximum length a name may be.
     type MaxLength = ConstU32<32>;
+}
+
+#[cfg(test)]
+mod code_walkthrough {
+    use sp_core::bounded::BoundedVec;
+    use sp_core::crypto::AccountId32;
+    use sp_runtime::MultiAddress;
+    use pallet_identity::{Data, IdentityField, IdentityFields, IdentityInfo, Judgement};
+    use crate::{Hash, Runtime, RuntimeOrigin};
+    use crate::config::MaxAdditionalFields;
+
+    const ACCOUNT: AccountId32 = AccountId32::new([0u8;32]);
+    const REGISTRAR: AccountId32 = AccountId32::new([0u8;32]);
+
+    #[cfg(test)]
+    fn overview() {
+        let identity = 	IdentityInfo {
+            additional: BoundedVec::<(Data,Data),MaxAdditionalFields>::default(),
+            display: Data::None,
+            legal: Data::None,
+            web: Data::None,
+            riot: Data::None,
+            email: Data::None,
+            pgp_fingerprint: None,
+            image: Data::None,
+            twitter: Data::None,
+        };
+        let fields = IdentityFields(IdentityField::Display | IdentityField::Legal | IdentityField::Riot);
+
+        // identity
+        type Identity = pallet_identity::Pallet<Runtime>;
+        Identity::set_identity(RuntimeOrigin::signed(ACCOUNT), Box::new(identity)).unwrap();
+        Identity::set_subs(RuntimeOrigin::signed(ACCOUNT), Vec::default()).unwrap();
+        Identity::add_registrar(RuntimeOrigin::root(), MultiAddress::Id(REGISTRAR)).unwrap(); // Root/Super-user
+        Identity::set_fee(RuntimeOrigin::signed(REGISTRAR), 0, 100).unwrap(); // Registrar
+        Identity::set_fields(RuntimeOrigin::signed(REGISTRAR), 0, fields).unwrap(); // Registrar
+        Identity::request_judgement(RuntimeOrigin::signed(ACCOUNT), 0, 100).unwrap();
+        Identity::cancel_request(RuntimeOrigin::signed(ACCOUNT), 0).unwrap();
+        Identity::provide_judgement(RuntimeOrigin::signed(REGISTRAR), 0, MultiAddress::Id(ACCOUNT), Judgement::Erroneous, Hash::zero()).unwrap(); // Registrar
+        Identity::clear_identity(RuntimeOrigin::signed(ACCOUNT)).unwrap();
+        Identity::quit_sub(RuntimeOrigin::signed(ACCOUNT)).unwrap();
+        Identity::kill_identity(RuntimeOrigin::root(), MultiAddress::Id(ACCOUNT)).unwrap(); // Root/Super-user
+
+        // nicks
+        type Nicks = pallet_nicks::Pallet<Runtime>;
+        Nicks::set_name(RuntimeOrigin::signed(ACCOUNT), "nick".into()).unwrap();
+        Nicks::clear_name(RuntimeOrigin::signed(ACCOUNT)).unwrap();
+        Nicks::force_name(RuntimeOrigin::root(), MultiAddress::Id(ACCOUNT), "name".into()).unwrap();
+        Nicks::kill_name(RuntimeOrigin::root(), MultiAddress::Id(ACCOUNT)).unwrap();
+    }
 }
