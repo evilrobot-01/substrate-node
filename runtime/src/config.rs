@@ -39,11 +39,14 @@ impl pallet_identity::Config for Runtime {
     /// Maximum number of registrars allowed in the system. Needed to bound the complexity of, e.g., updating judgements.
     type MaxRegistrars = MaxRegistrars;
     /// What to do with slashed funds.
-    type Slashed = (); // LS: kitchensink-runtime, Kusama, Polkadot all use Treasury here
+    // LS: kitchensink-runtime, Kusama, Polkadot use Treasury pallet via OnUnbalanced trait
+    type Slashed = ();
     /// The origin which may forcibly set or remove a name. Root can always do this.
-    type ForceOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime, Kusama, Polkadot all use EnsureRootOrHalfCouncil (pallet-collective) here
+    // LS: kitchensink-runtime, Kusama, Polkadot all use MoreThanHalfCouncil (pallet-collective)
+    // LS: All origin checks via EnsureOrigin trait
+    type ForceOrigin = EnsureRoot<AccountId>;
     /// The origin which may add or remove registrars. Root can always do this.
-    type RegistrarOrigin = EnsureRoot<AccountId>; // LS: kitchensink-runtime, Kusama, Polkadot all use EnsureRootOrHalfCouncil (pallet-collective) here
+    type RegistrarOrigin = EnsureRoot<AccountId>;
     /// Weight information for extrinsics in this pallet.
     type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
 }
@@ -78,6 +81,7 @@ mod code_walkthrough {
     use crate::config::MaxAdditionalFields;
 
     const ACCOUNT: AccountId32 = AccountId32::new([0u8;32]);
+    const SUB_ACCOUNT: AccountId32 = AccountId32::new([0u8;32]);
     const REGISTRAR: AccountId32 = AccountId32::new([0u8;32]);
 
     #[cfg(test)]
@@ -96,18 +100,25 @@ mod code_walkthrough {
         let fields = IdentityFields(IdentityField::Display | IdentityField::Legal | IdentityField::Riot);
 
         // identity
-        type Identity = pallet_identity::Pallet<Runtime>;
-        Identity::set_identity(RuntimeOrigin::signed(ACCOUNT), Box::new(identity)).unwrap();
-        Identity::set_subs(RuntimeOrigin::signed(ACCOUNT), Vec::default()).unwrap();
+        type Identity = pallet_identity::Pallet<Runtime>; // LS: Pallet storage
+
         Identity::add_registrar(RuntimeOrigin::root(), MultiAddress::Id(REGISTRAR)).unwrap(); // Root/Super-user
         Identity::set_fee(RuntimeOrigin::signed(REGISTRAR), 0, 100).unwrap(); // Registrar
-        Identity::set_fields(RuntimeOrigin::signed(REGISTRAR), 0, fields).unwrap(); // Registrar
-        Identity::request_judgement(RuntimeOrigin::signed(ACCOUNT), 0, 100).unwrap();
-        Identity::cancel_request(RuntimeOrigin::signed(ACCOUNT), 0).unwrap();
-        Identity::provide_judgement(RuntimeOrigin::signed(REGISTRAR), 0, MultiAddress::Id(ACCOUNT), Judgement::Erroneous, Hash::zero()).unwrap(); // Registrar
-        Identity::clear_identity(RuntimeOrigin::signed(ACCOUNT)).unwrap();
+        // Identity::set_fields(RuntimeOrigin::signed(REGISTRAR), 0, fields).unwrap(); // Registrar
+
+        Identity::set_identity(RuntimeOrigin::signed(ACCOUNT), Box::new(identity)).unwrap();
+        Identity::set_subs(RuntimeOrigin::signed(ACCOUNT), vec![(SUB_ACCOUNT, Data::None)]).unwrap();
+        // Identity::add_sub(RuntimeOrigin::signed(ACCOUNT), MultiAddress::Id(SUB_ACCOUNT), Data::None).unwrap();
+        // Identity::remove_sub(RuntimeOrigin::signed(ACCOUNT), MultiAddress::Id(SUB_ACCOUNT)).unwrap();
+        // Identity::rename_sub(RuntimeOrigin::signed(ACCOUNT), MultiAddress::Id(SUB_ACCOUNT), Data::None).unwrap();
         Identity::quit_sub(RuntimeOrigin::signed(ACCOUNT)).unwrap();
-        Identity::kill_identity(RuntimeOrigin::root(), MultiAddress::Id(ACCOUNT)).unwrap(); // Root/Super-user
+
+        Identity::request_judgement(RuntimeOrigin::signed(ACCOUNT), 0, 100).unwrap();
+        // Identity::cancel_request(RuntimeOrigin::signed(ACCOUNT), 0).unwrap();
+        Identity::provide_judgement(RuntimeOrigin::signed(REGISTRAR), 0, MultiAddress::Id(ACCOUNT), Judgement::Erroneous, Hash::zero()).unwrap(); // Registrar
+
+        // Identity::clear_identity(RuntimeOrigin::signed(ACCOUNT)).unwrap();
+        // Identity::kill_identity(RuntimeOrigin::root(), MultiAddress::Id(ACCOUNT)).unwrap(); // Root/Super-user
 
         // nicks
         type Nicks = pallet_nicks::Pallet<Runtime>;
