@@ -5,17 +5,15 @@ pub const CENTS: Balance = 1_000 * MILLICENTS; // assume this is worth about a c
 pub const DOLLARS: Balance = 100 * CENTS;
 
 parameter_types! {
+    // LS: deposits
     pub const BasicDeposit: Balance = 10 * DOLLARS;                        // 258 bytes on-chain
     pub const FieldDeposit: Balance = 250 * CENTS;                         // 66 bytes on-chain
     pub const SubAccountDeposit: Balance = 2 * DOLLARS;                    // 53 bytes on-chain
+    // LS: Bounding
     pub const MaxSubAccounts: u32 = 100;
     pub const MaxAdditionalFields: u32 = 100;
     pub const MaxRegistrars: u32 = 20;
 }
-
-// Reference Kusama and Polkadot runtimes as dev-dependencies, for easy navigation of associated configuration
-#[cfg(test)] type Kusama = kusama_runtime::Runtime;
-#[cfg(test)] type Polkadot = polkadot_runtime::Runtime;
 
 // Based on kitchensink-runtime at https://github.com/paritytech/substrate/blob/0ee03277c33b6334ddba7434e014fa637dcb6107/bin/node/runtime/src/lib.rs#L1311-L1324
 impl pallet_identity::Config for Runtime {
@@ -59,10 +57,11 @@ impl pallet_nicks::Config for Runtime {
     // The Balances pallet implements the ReservableCurrency trait. `Balances` is defined in `construct_runtime!` macro.
     type Currency = Balances; // LS: Balances pallet via ReservableCurrency trait
     /// Reservation fee.
-    type ReservationFee = ConstU128<100>;
+    type ReservationFee = BasicDeposit;
     /// What to do with slashed funds.
     type Slashed = (); // No action is taken when deposits are forfeited.
     /// The origin which may forcibly set or remove a name. Root can always do this.
+    // LS: Force origin check via EnsureOrigin trait
     type ForceOrigin = EnsureRoot<AccountId>; // Configure the FRAME System Root origin as the Nick pallet admin: https://paritytech.github.io/substrate/master/frame_system/enum.RawOrigin.html#variant.Root
     // LS: Bound name length (8-32) - on-chain storage expensive
     /// The minimum length a name may be.
@@ -100,7 +99,7 @@ mod code_walkthrough {
         let fields = IdentityFields(IdentityField::Display | IdentityField::Legal | IdentityField::Riot);
 
         // identity
-        type Identity = pallet_identity::Pallet<Runtime>; // LS: Pallet storage
+        type Identity = pallet_identity::Pallet<Runtime>; // LS: highlight storage items
 
         Identity::add_registrar(RuntimeOrigin::root(), MultiAddress::Id(REGISTRAR)).unwrap(); // Root/Super-user
         Identity::set_fee(RuntimeOrigin::signed(REGISTRAR), 0, 100).unwrap(); // Registrar
@@ -128,3 +127,7 @@ mod code_walkthrough {
         Nicks::kill_name(RuntimeOrigin::root(), MultiAddress::Id(ACCOUNT)).unwrap();
     }
 }
+
+// Reference Kusama and Polkadot runtimes as dev-dependencies, for easy navigation of associated configuration
+#[cfg(test)] type Kusama = kusama_runtime::Runtime;
+#[cfg(test)] type Polkadot = polkadot_runtime::Runtime;

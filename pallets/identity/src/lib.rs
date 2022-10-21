@@ -348,16 +348,17 @@ pub mod pallet {
 			info: Box<IdentityInfo<T::MaxAdditionalFields>>,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
-			// LS: ensure number of additional fields within bounds, calculate total field deposit accordingly
+			// LS: ensure number of additional fields within bounds
 			let extra_fields = info.additional.len() as u32;
 			ensure!(extra_fields <= T::MaxAdditionalFields::get(), Error::<T>::TooManyFields);
+			// LS: calculate total field deposit accordingly
 			let fd = <BalanceOf<T>>::from(extra_fields) * T::FieldDeposit::get();
 
-			// LS: Create identity registration from supplied info, retaining any existing 'sticky' judgements
+			// LS: Create identity registration from supplied info
 			let mut id = match <IdentityOf<T>>::get(&sender) {
 				Some(mut id) => {
 					// Only keep non-positive judgements.
-					id.judgements.retain(|j| j.1.is_sticky());
+					id.judgements.retain(|j| j.1.is_sticky()); // LS: retain existing 'sticky' judgements
 					id.info = *info;
 					id
 				},
@@ -426,14 +427,14 @@ pub mod pallet {
 			subs: Vec<(T::AccountId, Data)>,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
-			// LS: ensure identity already defined for sender and requested number of sub-accounts within bounds
+			// LS: ensure identity already registered for sender and requested number of sub-accounts within bounds
 			ensure!(<IdentityOf<T>>::contains_key(&sender), Error::<T>::NotFound);
 			ensure!(
 				subs.len() <= T::MaxSubAccounts::get() as usize,
 				Error::<T>::TooManySubAccounts
 			);
 
-			// LS: Get existing sub-accounts and calculate deposit based on requested number of sub-accounts
+			// LS: Get existing sub-accounts, calculate deposit based on requested number of sub-accounts
 			let (old_deposit, old_ids) = <SubsOf<T>>::get(&sender);
 			let new_deposit = T::SubAccountDeposit::get() * <BalanceOf<T>>::from(subs.len() as u32);
 
@@ -589,12 +590,12 @@ pub mod pallet {
 
 			T::Currency::reserve(&sender, registrar.fee)?;
 
-			// LS: update identity storage with requested judgements and emit event
+			// LS: update identity storage
 			let judgements = id.judgements.len();
 			let extra_fields = id.info.additional.len();
 			<IdentityOf<T>>::insert(&sender, id);
 
-			// LS: registrar could listen for events pertaining to their index, perhaps adding to queue
+			// LS: emit event - registrar could listen for events pertaining to their index, adding to queue
 			Self::deposit_event(Event::JudgementRequested {
 				who: sender,
 				registrar_index: reg_index,
@@ -823,12 +824,13 @@ pub mod pallet {
 			let sender = ensure_signed(origin)?;
 			let target = T::Lookup::lookup(target)?;
 			ensure!(!judgement.has_deposit(), Error::<T>::InvalidJudgement); // LS: a pending judgement (FeePaid) cannot be provided
-			// LS: ensures registrar exists and sender matches account, along with ensuring identity exists for target
+			// LS: ensures registrar exists and sender matches account
 			<Registrars<T>>::get()
 				.get(reg_index as usize)
 				.and_then(Option::as_ref)
 				.filter(|r| r.account == sender)
 				.ok_or(Error::<T>::InvalidIndex)?;
+			// LS: ensure identity registered for target
 			let mut id = <IdentityOf<T>>::get(&target).ok_or(Error::<T>::InvalidTarget)?;
 
 			// LS: uses hash of identity information to ensure judgement is being provided on expected data
@@ -849,7 +851,7 @@ pub mod pallet {
 							BalanceStatus::Free,
 						);
 					}
-					// LS: overwrites judgement, even if 'sticky' (erroneous)
+					// LS: set judgement, even if 'sticky' (erroneous)
 					id.judgements[position] = item
 				},
 				// LS: adds judgement - without receiving a fee

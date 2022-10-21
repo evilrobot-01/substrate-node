@@ -82,6 +82,17 @@ pub mod pallet {
 		type MaxLength: Get<u32>;
 	}
 
+	#[pallet::pallet]
+	#[pallet::generate_store(pub(super) trait Store)]
+	pub struct Pallet<T>(_);
+
+	/// The lookup table for names.
+	#[pallet::storage]
+	pub(super) type NameOf<T: Config> =
+		// LS: Name/deposit stored by account
+		// LS: TwoX64 hashing algorithm used - account identifier typically public key
+		StorageMap<_, Twox64Concat, T::AccountId, (BoundedVec<u8, T::MaxLength>, BalanceOf<T>)>;
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
@@ -107,17 +118,6 @@ pub mod pallet {
 		/// An account isn't named.
 		Unnamed,
 	}
-
-	/// The lookup table for names.
-	#[pallet::storage]
-	// LS: Name/deposit stored by account
-	// LS: TwoX64 hashing algorithm used - account identifier typically public key
-	pub(super) type NameOf<T: Config> =
-		StorageMap<_, Twox64Concat, T::AccountId, (BoundedVec<u8, T::MaxLength>, BalanceOf<T>)>;
-
-	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
-	pub struct Pallet<T>(_);
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -149,7 +149,8 @@ pub mod pallet {
 
 			// LS: Process deposit
 			let deposit = if let Some((_, deposit)) = <NameOf<T>>::get(&sender) {
-				// LS: existing deposit held, simply amend name. Perhaps check if reservation fee increased due to runtime upgrade?
+				// LS: existing deposit held, simply amend name.
+				// LS: Perhaps check if reservation fee increased due to runtime upgrade?
 				Self::deposit_event(Event::<T>::NameChanged { who: sender.clone() });
 				deposit
 			} else {
@@ -204,7 +205,7 @@ pub mod pallet {
 		/// # </weight>
 		#[pallet::weight(70_000_000)]
 		pub fn kill_name(origin: OriginFor<T>, target: AccountIdLookupOf<T>) -> DispatchResult {
-			// LS: ensure origin of call authorised to forcibly set name, based on runtime configuration (Root)
+			// LS: ensure origin of call authorised to forcibly set name, based on runtime configuration
 			T::ForceOrigin::ensure_origin(origin)?;
 
 			// LS: remove name associated with supplied target account, slash associated deposit
@@ -237,14 +238,14 @@ pub mod pallet {
 			target: AccountIdLookupOf<T>,
 			name: Vec<u8>,
 		) -> DispatchResult {
-			// LS: ensure origin of call authorised to forcibly set name, based on runtime configuration (Root)
+			// LS: ensure origin of call authorised to forcibly set name, based on runtime configuration
 			T::ForceOrigin::ensure_origin(origin)?;
 
-			// LS: set supplied name for supplied target, taking no deposit
+			// LS: set supplied name for supplied target, taking *no deposit*
 			let bounded_name: BoundedVec<_, _> =
 				name.try_into().map_err(|()| Error::<T>::TooLong)?; // LS: doesn't check MinLength as `set_name` does!
 			let target = T::Lookup::lookup(target)?;
-			let deposit = <NameOf<T>>::get(&target).map(|x| x.1).unwrap_or_else(Zero::zero);
+			let deposit = <NameOf<T>>::get(&target).map(|x| x.1).unwrap_or_else(Zero::zero); // LS: preserve deposit
 			<NameOf<T>>::insert(&target, (bounded_name, deposit));
 
 			Self::deposit_event(Event::<T>::NameForced { target });
