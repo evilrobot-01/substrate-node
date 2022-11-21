@@ -437,6 +437,7 @@ pub mod pallet {
 	}
 }
 
+// LS: Runtime API implementations along with fee computations
 impl<T: Config> Pallet<T>
 where
 	BalanceOf<T>: FixedPointOperand,
@@ -705,7 +706,7 @@ where
 		final_fee: BalanceOf<T>,
 	) -> TransactionPriority {
 		// Calculate how many such extrinsics we could fit into an empty block and take
-		// the limitting factor.
+		// the limiting factor.
 		let max_block_weight = T::BlockWeights::get().max_block;
 		let max_block_length = *T::BlockLength::get().max.get(info.class) as u64;
 
