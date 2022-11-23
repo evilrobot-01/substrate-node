@@ -6,35 +6,20 @@ impl pallet_transaction_payment::Config for Runtime {
 	/// The overarching event type.
 	type RuntimeEvent = RuntimeEvent;
 	/// Handler for withdrawing, refunding and depositing the transaction fee.
-	// LS: transaction fees withdrawn before execution, weight adjusted after transaction execution
-	// LS: transaction fees then deposited/refunded as necessary
-	// LS: balances pallet for fee payment using native token, no handler for 'OnUnbalanced
+	// LS: Handler for withdrawal (pre-dispatch), correct and deposit (post-dispatch) of tx fees
+	// LS: Balances pallet for fee payment using native token, no handler for 'OnUnbalanced
 	type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
 	/// A fee multiplier for `Operational` extrinsics to compute "virtual tip" to boost `priority`
-	///
-	/// This value is multiplied by the `final_fee` to obtain a "virtual tip" that is later
-	/// added to a tip component in regular `priority` calculations.
-	/// It means that a `Normal` transaction can front-run a similarly-sized `Operational`
-	/// extrinsic (with no tip), by including a tip value greater than the virtual tip.
-	///
-	/// ```rust,ignore
-	/// // For `Normal`
-	/// let priority = priority_calc(tip);
-	///
-	/// // For `Operational`
-	/// let virtual_tip = (inclusion_fee + tip) * OperationalFeeMultiplier;
-	/// let priority = priority_calc(tip + virtual_tip);
-	/// ```
-	///
-	/// Note that since we use `final_fee` the multiplier applies also to the regular `tip`
-	/// sent with the transaction. So, not only does the transaction get a priority bump based
-	/// on the `inclusion_fee`, but we also amplify the impact of tips applied to `Operational`
+	// LS: multiplier to prioritise operational extrinsics - why not max?
+	// LS: virtual_tip = final_fee * operational_fee_multiplier
 	type OperationalFeeMultiplier = ConstU8<5>;
 	/// Convert a weight value into a deductible fee based on the currency type.
-	type WeightToFee = IdentityFee<Balance>; // LS: one unit of weight = one unit of fee
+	type WeightToFee = IdentityFee<Balance>; // LS: IdentifyFee -> one unit of weight = one unit of fee
 	/// Convert a length value into a deductible fee based on the currency type.
+	// LS: tx length
 	type LengthToFee = IdentityFee<Balance>;
 	/// Update the multiplier of the next block, based on the previous block's weight.
+	// LS: Block fee multiplier
 	type FeeMultiplierUpdate = ConstFeeMultiplier<FeeMultiplier>;
 }
 
@@ -42,7 +27,8 @@ impl pallet_asset_tx_payment::Config for Runtime {
 	/// The overarching event type.
 	type RuntimeEvent = RuntimeEvent;
 	/// The fungibles instance used to pay for transactions in assets.
-	type Fungibles = Assets; // LS: Assets pallet via fungibles::Balanced<AccountId> trait
+	// LS: Assets pallet via fungibles::Balanced<AccountId> trait
+	type Fungibles = Assets;
 	/// The actual transaction charging logic that charges the fees.
 	// LS: Fungibles adapter for balance to asset conversion and credit handler
 	type OnChargeAssetTransaction = pallet_asset_tx_payment::FungiblesAdapter<
@@ -56,31 +42,76 @@ impl pallet_asset_tx_payment::Config for Runtime {
 
 #[cfg(test)]
 mod code_walkthrough {
-	use super::{Balance, Block, Runtime, RuntimeCall};
+	use super::{BalancesCall, Runtime, RuntimeCall, RuntimeOrigin};
+	use codec::Encode;
 	use frame_support::traits::Hooks;
+	#[allow(unused_imports)]
+	use pallet_transaction_payment_rpc_runtime_api::{
+		TransactionPaymentApi, TransactionPaymentCallApi,
+	};
+	use sp_core::crypto::AccountId32;
+	use sp_runtime::{
+		testing::TestXt,
+		traits::{Dispatchable, SignedExtension},
+		MultiAddress,
+	};
+
+	type XT = TestXt<RuntimeCall, ()>;
+
+	const ASSET: u32 = 0;
+	const BLOCK: u32 = 0;
+	const BENEFICIARY: AccountId32 = AccountId32::new([0u8; 32]);
+	const TRANSFER: <Runtime as frame_system::Config>::RuntimeCall =
+		RuntimeCall::Balances(BalancesCall::transfer {
+			dest: MultiAddress::Id(BENEFICIARY),
+			value: TRANSFER_AMOUNT,
+		});
+	const TRANSFER_AMOUNT: u128 = 1_000_000_000_000;
+	const TRANSACTOR: AccountId32 = AccountId32::new([0u8; 32]);
+	const TIP: u128 = 100_000_000_000;
 
 	#[cfg(test)]
 	fn overview() {
-		// LS: Pallets
+		let len: usize = TRANSFER.encode().len();
+
+		// LS: Transaction Payment pallet: no extrinsics, just RPC API, SignedExtension, hook
 		type TxPayment = pallet_transaction_payment::Pallet<Runtime>;
+		type TxPaymentEvent = pallet_transaction_payment::pallet::Event<Runtime>;
+
+		// LS: RPC API
+		let unsigned_extrinsic = XT::new(TRANSFER, None);
+		// LS: query *predicted* weight, class, inclusion fee (based on extrinsic weight attribute)
+		let dispatch_info = TxPayment::query_info(unsigned_extrinsic.clone(), len as u32).into();
+		let _fee_details = TxPayment::query_fee_details(unsigned_extrinsic, len as u32);
+		// LS: *call* variants always include all fees, above only if extrinsic signed
+		let _ = TxPayment::query_call_info(TRANSFER, len as u32);
+		let _ = TxPayment::query_call_fee_details(TRANSFER, len as u32);
+
+		// LS: Signed Extension - ChargeTransactionPayment
+		type ChargeTxPayment = pallet_transaction_payment::ChargeTransactionPayment<Runtime>;
+		let se = ChargeTxPayment::from(TIP);
+		se.validate(&TRANSACTOR, &TRANSFER, &dispatch_info, len).unwrap(); // LS: used by transaction queue to *quickly* validate
+		let pre = se.pre_dispatch(&TRANSACTOR, &TRANSFER, &dispatch_info, len).ok(); // LS: withdraw fees
+		let post_info = TRANSFER.dispatch(RuntimeOrigin::signed(TRANSACTOR)).unwrap(); // LS: dispatch call to determine actual fees
+		ChargeTxPayment::post_dispatch(pre, &dispatch_info, &post_info, len, &Ok(())).unwrap();
+
+		// LS: Hooks
+		TxPayment::on_finalize(BLOCK); // LS: updates nextFeeMultiplier storage item for next block
+
+		// LS: runtime config of signed extensions
+		type SignedExtensions = super::SignedExtra;
+
+		// LS: Asset Transaction Payment: no extrinsics, just SignedExtension
 		type AssetTxPayment = pallet_asset_tx_payment::Pallet<Runtime>;
+		type AssetTxPaymentEvent = pallet_asset_tx_payment::pallet::Event<Runtime>;
 
-		// LS: No extrinsics, just SignedExtensions and on_finalize hook
-		type ChargeTransactionPayment =
-			pallet_transaction_payment::ChargeTransactionPayment<Runtime>;
+		// LS: Signed Extension - ChargeAssetTxPayment
 		type ChargeAssetTxPayment = pallet_asset_tx_payment::ChargeAssetTxPayment<Runtime>;
-		type SignedExtensions = super::SignedExtra; // LS: runtime config
-		TxPayment::on_finalize(); // LS: updates nextFeeMultiplier storage item for next block
-
-		// Runtime APIs
-		type TransactionPaymentApi =
-			dyn pallet_transaction_payment_rpc_runtime_api::TransactionPaymentApi<Block, Balance>;
-		type TransactionPaymentCallApi =
-			dyn pallet_transaction_payment_rpc_runtime_api::TransactionPaymentCallApi<
-				Block,
-				Balance,
-				RuntimeCall,
-			>;
+		let se = ChargeAssetTxPayment::from(TIP, Some(ASSET)); // LS: AssetID included
+		se.validate(&TRANSACTOR, &TRANSFER, &dispatch_info, len).unwrap();
+		let pre = se.pre_dispatch(&TRANSACTOR, &TRANSFER, &dispatch_info, len).ok();
+		let post_info = TRANSFER.dispatch(RuntimeOrigin::signed(TRANSACTOR)).unwrap();
+		ChargeAssetTxPayment::post_dispatch(pre, &dispatch_info, &post_info, len, &Ok(())).unwrap();
 	}
 }
 

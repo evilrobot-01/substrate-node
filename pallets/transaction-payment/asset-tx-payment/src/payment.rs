@@ -124,6 +124,7 @@ where
 		// less than one (e.g. 0.5) but gets rounded down by integer division we introduce a minimum
 		// fee.
 		let min_converted_fee = if fee.is_zero() { Zero::zero() } else { One::one() };
+		// LS: convert fee to asset balance (using ratio of Balances::ED to Asset:MinBalance)
 		let converted_fee = CON::to_asset_balance(fee, asset_id)
 			.map_err(|_| TransactionValidityError::from(InvalidTransaction::Payment))?
 			.max(min_converted_fee);
@@ -150,6 +151,7 @@ where
 	) -> Result<(), TransactionValidityError> {
 		let min_converted_fee = if corrected_fee.is_zero() { Zero::zero() } else { One::one() };
 		// Convert the corrected fee into the asset used for payment.
+		// LS: convert fee to asset balance (using ratio of Balances::ED to Asset:MinBalance)
 		let converted_fee = CON::to_asset_balance(corrected_fee, paid.asset())
 			.map_err(|_| -> TransactionValidityError { InvalidTransaction::Payment.into() })?
 			.max(min_converted_fee);

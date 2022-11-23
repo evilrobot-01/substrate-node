@@ -384,11 +384,13 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_finalize(_: T::BlockNumber) {
+			// LS: update next fee multiplier based on current * configured multiplier
 			<NextFeeMultiplier<T>>::mutate(|fm| {
 				*fm = T::FeeMultiplierUpdate::convert(*fm);
 			});
 		}
 
+		// LS: runtime integrity test: assertions to check runtime config when testing runtime
 		fn integrity_test() {
 			// given weight == u64, we build multipliers from `diff` of two weight values, which can
 			// at most be maximum block weight. Make sure that this can fit in a multiplier without
@@ -464,6 +466,7 @@ where
 		// a very very little potential gain in the future.
 		let dispatch_info = <Extrinsic as GetDispatchInfo>::get_dispatch_info(&unchecked_extrinsic);
 
+		// LS: compute fee for signed extrinsics only
 		let partial_fee = if unchecked_extrinsic.is_signed().unwrap_or(false) {
 			Self::compute_fee(len, &dispatch_info, 0u32.into())
 		} else {
@@ -647,6 +650,7 @@ where
 /// considered before regular transactions.
 #[derive(Encode, Decode, Clone, Eq, PartialEq, TypeInfo)]
 #[scale_info(skip_type_params(T))]
+// LS: wrapper struct on some balance
 pub struct ChargeTransactionPayment<T: Config>(#[codec(compact)] BalanceOf<T>);
 
 impl<T: Config> ChargeTransactionPayment<T>
@@ -799,6 +803,7 @@ where
 		info: &DispatchInfoOf<Self::Call>,
 		len: usize,
 	) -> TransactionValidity {
+		// LS: check transactor has sufficient funds
 		let (final_fee, _) = self.withdraw_fee(who, call, info, len)?;
 		let tip = self.0;
 		Ok(ValidTransaction {
@@ -814,7 +819,9 @@ where
 		info: &DispatchInfoOf<Self::Call>,
 		len: usize,
 	) -> Result<Self::Pre, TransactionValidityError> {
+		// LS: withdraw fees prior to dispatch, calling OnChargeTransaction to handle withdrawal
 		let (_fee, imbalance) = self.withdraw_fee(who, call, info, len)?;
+		// LS: result returned for passing to post-dispatch to calculate any refund
 		Ok((self.0, who.clone(), imbalance))
 	}
 
@@ -825,6 +832,7 @@ where
 		len: usize,
 		_result: &DispatchResult,
 	) -> Result<(), TransactionValidityError> {
+		// LS: correct fees from those charged in pre-dispatch to actual charged from post_info
 		if let Some((tip, who, imbalance)) = maybe_pre {
 			let actual_fee = Pallet::<T>::compute_actual_fee(len as u32, info, post_info, tip);
 			T::OnChargeTransaction::correct_and_deposit_fee(

@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use sp_runtime::traits::{AtLeast32BitUnsigned, Zero};
 use sp_std::prelude::*;
 
-use frame_support::dispatch::DispatchClass;
+use frame_support::dispatch::{DispatchClass, DispatchInfo};
 
 /// The base fee and adjusted weight and length fees constitute the _inclusion fee_.
 #[derive(Encode, Decode, Clone, Eq, PartialEq)]
@@ -113,6 +113,12 @@ pub struct RuntimeDispatchInfo<Balance, Weight = frame_support::weights::Weight>
 	/// depends on the signature (i.e. depends on a `SignedExtension`).
 	#[cfg_attr(feature = "std", serde(with = "serde_balance"))]
 	pub partial_fee: Balance,
+}
+
+impl<Balance> Into<DispatchInfo> for RuntimeDispatchInfo<Balance> {
+	fn into(self) -> DispatchInfo {
+		DispatchInfo { weight: self.weight, class: self.class, pays_fee: Default::default() }
+	}
 }
 
 #[cfg(feature = "std")]

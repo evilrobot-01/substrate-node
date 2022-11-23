@@ -59,8 +59,7 @@ pub trait OnChargeTransaction<T: Config> {
 }
 
 /// Implements the transaction payment for a pallet implementing the `Currency`
-/// trait (eg. the pallet_balances) using an unbalance handler (implementing
-/// `OnUnbalanced`).
+/// trait (eg. the pallet_balances) using an unbalance handler (implementing`OnUnbalanced`).
 ///
 /// The unbalance handler is given 2 unbalanceds in [`OnUnbalanced::on_unbalanceds`]: fee and
 /// then tip.
@@ -90,6 +89,7 @@ where
 	/// Withdraw the predicted fee from the transaction origin.
 	///
 	/// Note: The `fee` already includes the `tip`.
+	// LS: 'pre-dispatch'
 	fn withdraw_fee(
 		who: &T::AccountId,
 		_call: &T::RuntimeCall,
@@ -107,6 +107,7 @@ where
 			WithdrawReasons::TRANSACTION_PAYMENT | WithdrawReasons::TIP
 		};
 
+		// LS: withdraw fee from transactor, returning negative imbalance if successful
 		match C::withdraw(who, fee, withdraw_reason, ExistenceRequirement::KeepAlive) {
 			Ok(imbalance) => Ok(Some(imbalance)),
 			Err(_) => Err(InvalidTransaction::Payment.into()),
@@ -118,6 +119,7 @@ where
 	/// be refunded.
 	///
 	/// Note: The `corrected_fee` already includes the `tip`.
+	// LS: 'post-dispatch'
 	fn correct_and_deposit_fee(
 		who: &T::AccountId,
 		_dispatch_info: &DispatchInfoOf<T::RuntimeCall>,
@@ -126,6 +128,7 @@ where
 		tip: Self::Balance,
 		already_withdrawn: Self::LiquidityInfo,
 	) -> Result<(), TransactionValidityError> {
+		// LS: calculate correct fees and refund as necessary
 		if let Some(paid) = already_withdrawn {
 			// Calculate how much refund we should return
 			let refund_amount = paid.peek().saturating_sub(corrected_fee);
@@ -141,6 +144,7 @@ where
 				.map_err(|_| TransactionValidityError::Invalid(InvalidTransaction::Payment))?;
 			// Call someone else to handle the imbalance (fee and tip separately)
 			let (tip, fee) = adjusted_paid.split(tip);
+			// LS: pass set of imbalances to OnUnbalanced handler for processing
 			OU::on_unbalanceds(Some(fee).into_iter().chain(Some(tip)));
 		}
 		Ok(())

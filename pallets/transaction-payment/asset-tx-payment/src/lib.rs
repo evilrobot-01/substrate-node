@@ -177,7 +177,9 @@ where
 		debug_assert!(self.tip <= fee, "tip should be included in the computed fee");
 		if fee.is_zero() {
 			Ok((fee, InitialPayment::Nothing))
-		} else if let Some(asset_id) = self.asset_id {
+		}
+		// LS: withdraw fee via OnChargeAssetTransaction handler (if asset specified)
+		else if let Some(asset_id) = self.asset_id {
 			T::OnChargeAssetTransaction::withdraw_fee(
 				who,
 				call,
@@ -187,7 +189,9 @@ where
 				self.tip.into(),
 			)
 			.map(|i| (fee, InitialPayment::Asset(i.into())))
-		} else {
+		}
+		// LS: otherwise use standard pallet-transaction-payment::OnChargeTransaction handler
+		else {
 			<OnChargeTransactionOf<T> as OnChargeTransaction<T>>::withdraw_fee(
 				who, call, info, fee, self.tip,
 			)
