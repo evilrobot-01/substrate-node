@@ -84,8 +84,8 @@ where
 	>,
 	OU: OnUnbalanced<NegativeImbalanceOf<C, T>>,
 {
-	type LiquidityInfo = Option<NegativeImbalanceOf<C, T>>;
 	type Balance = <C as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+	type LiquidityInfo = Option<NegativeImbalanceOf<C, T>>;
 
 	/// Withdraw the predicted fee from the transaction origin.
 	///

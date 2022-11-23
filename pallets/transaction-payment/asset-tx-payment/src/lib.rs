@@ -70,7 +70,7 @@ pub(crate) type OnChargeTransactionOf<T> =
 	<T as pallet_transaction_payment::Config>::OnChargeTransaction;
 // Balance type alias.
 pub(crate) type BalanceOf<T> = <OnChargeTransactionOf<T> as OnChargeTransaction<T>>::Balance;
-// Liquity info type alias.
+// Liquidity info type alias.
 pub(crate) type LiquidityInfoOf<T> =
 	<OnChargeTransactionOf<T> as OnChargeTransaction<T>>::LiquidityInfo;
 
@@ -89,7 +89,7 @@ pub(crate) type ChargeAssetBalanceOf<T> =
 // Asset id type alias.
 pub(crate) type ChargeAssetIdOf<T> =
 	<<T as Config>::OnChargeAssetTransaction as OnChargeAssetTransaction<T>>::AssetId;
-// Liquity info type alias.
+// Liquidity info type alias.
 pub(crate) type ChargeAssetLiquidityOf<T> =
 	<<T as Config>::OnChargeAssetTransaction as OnChargeAssetTransaction<T>>::LiquidityInfo;
 

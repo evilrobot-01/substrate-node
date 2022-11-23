@@ -1,6 +1,6 @@
 use node_template_runtime::{
-	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
-	SystemConfig, WASM_BINARY,
+	AccountId, AssetsConfig, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature,
+	SudoConfig, SystemConfig, WASM_BINARY,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -132,6 +132,11 @@ fn testnet_genesis(
 	endowed_accounts: Vec<AccountId>,
 	_enable_println: bool,
 ) -> GenesisConfig {
+	const DECIMALS: u8 = 12;
+	fn units(value: u128) -> u128 {
+		value * 10u128.pow(DECIMALS as u32)
+	}
+	let alice = get_account_id_from_seed::<sr25519::Public>("Alice");
 	GenesisConfig {
 		system: SystemConfig {
 			// Add Wasm runtime to storage.
@@ -140,6 +145,14 @@ fn testnet_genesis(
 		balances: BalancesConfig {
 			// Configure endowed accounts with initial balance of 1 << 60.
 			balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
+		},
+		assets: AssetsConfig {
+			/// Genesis assets: asset id, owner (account id), is_sufficient, min_balance (>0)
+			assets: vec![(0, alice.clone(), true, 500)],
+			/// Genesis metadata: asset id, name, symbol, decimal places
+			metadata: vec![(0, "LS Dollar".into(), "LSD".into(), DECIMALS)],
+			/// Genesis accounts: id, account_id, balance
+			accounts: vec![(0, alice.clone(), units(10))],
 		},
 		aura: AuraConfig {
 			authorities: initial_authorities.iter().map(|x| (x.0.clone())).collect(),

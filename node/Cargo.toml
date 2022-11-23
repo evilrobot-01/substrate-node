@@ -40,6 +40,7 @@ sp-inherents = { version = "4.0.0-dev", git = "https://github.com/paritytech/sub
 sp-keyring = { version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.32" }
 frame-system = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.32" }
 pallet-transaction-payment = { path = "../pallets/transaction-payment" }
+pallet-asset-tx-payment = { path = "../pallets/transaction-payment/asset-tx-payment" }
 
 # These dependencies are used for the node template's RPCs
 jsonrpsee = { version = "0.15.1", features = ["server"] }

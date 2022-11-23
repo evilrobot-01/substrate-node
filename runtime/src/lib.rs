@@ -282,6 +282,9 @@ construct_runtime!(
 		Balances: pallet_balances,
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
+		// LS: add assets & asset-tx-payment pallets to runtime
+		Assets: pallet_assets,
+		AssetTxPayment: pallet_asset_tx_payment,
 	}
 );
 
@@ -300,7 +303,9 @@ pub type SignedExtra = (
 	frame_system::CheckEra<Runtime>,
 	frame_system::CheckNonce<Runtime>,
 	frame_system::CheckWeight<Runtime>,
-	pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+	// LS: replace standard transaction payment signed extension with that of asset-tx-payment
+	//pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+	pallet_asset_tx_payment::ChargeAssetTxPayment<Runtime>,
 );
 
 /// Unchecked extrinsic type as expected by this runtime.

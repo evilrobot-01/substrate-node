@@ -306,10 +306,10 @@ pub mod pallet {
 		/// might be refunded. In the end the fees can be deposited.
 		type OnChargeTransaction: OnChargeTransaction<Self>;
 
-		/// A fee mulitplier for `Operational` extrinsics to compute "virtual tip" to boost their
+		/// A fee multiplier for `Operational` extrinsics to compute "virtual tip" to boost their
 		/// `priority`
 		///
-		/// This value is multipled by the `final_fee` to obtain a "virtual tip" that is later
+		/// This value is multiplied by the `final_fee` to obtain a "virtual tip" that is later
 		/// added to a tip component in regular `priority` calculations.
 		/// It means that a `Normal` transaction can front-run a similarly-sized `Operational`
 		/// extrinsic (with no tip), by including a tip value greater than the virtual tip.
@@ -788,7 +788,7 @@ where
 		// imbalance resulting from withdrawing the fee
 		<<T as Config>::OnChargeTransaction as OnChargeTransaction<T>>::LiquidityInfo,
 	);
-	fn additional_signed(&self) -> sp_std::result::Result<(), TransactionValidityError> {
+	fn additional_signed(&self) -> Result<(), TransactionValidityError> {
 		Ok(())
 	}
 
@@ -920,11 +920,10 @@ mod tests {
 		type BaseCallFilter = frame_support::traits::Everything;
 		type BlockWeights = BlockWeights;
 		type BlockLength = ();
-		type DbWeight = ();
 		type RuntimeOrigin = RuntimeOrigin;
+		type RuntimeCall = RuntimeCall;
 		type Index = u64;
 		type BlockNumber = u64;
-		type RuntimeCall = RuntimeCall;
 		type Hash = H256;
 		type Hashing = BlakeTwo256;
 		type AccountId = u64;
@@ -932,6 +931,7 @@ mod tests {
 		type Header = Header;
 		type RuntimeEvent = RuntimeEvent;
 		type BlockHashCount = ConstU64<250>;
+		type DbWeight = ();
 		type Version = ();
 		type PalletInfo = PalletInfo;
 		type AccountData = pallet_balances::AccountData<u64>;
@@ -945,14 +945,14 @@ mod tests {
 
 	impl pallet_balances::Config for Runtime {
 		type Balance = u64;
-		type RuntimeEvent = RuntimeEvent;
 		type DustRemoval = ();
+		type RuntimeEvent = RuntimeEvent;
 		type ExistentialDeposit = ConstU64<1>;
 		type AccountStore = System;
+		type WeightInfo = ();
 		type MaxLocks = ();
 		type MaxReserves = ();
 		type ReserveIdentifier = [u8; 8];
-		type WeightInfo = ();
 	}
 
 	impl WeightToFeeT for WeightToFee {
@@ -1352,7 +1352,7 @@ mod tests {
 							adjusted_weight_fee: info
 								.weight
 								.min(BlockWeights::get().max_block)
-								.ref_time() as u64 * 2 * 3 / 2  /* weight * weight_fee * multipler */
+								.ref_time() as u64 * 2 * 3 / 2  /* weight * weight_fee * multiplier */
 						}),
 						tip: 0,
 					},
