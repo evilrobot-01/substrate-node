@@ -1,28 +1,47 @@
+use self::additional_config::AssetsToBlockAuthor;
 use super::*;
-use crate::config::additional_config::AssetsToBlockAuthor;
 use sp_runtime::traits::ConvertInto;
+
+mod dotsama {
+	// Reference Kusama/Polkadot runtimes as dev-dependencies, for easy navigation to configuration
+	#[cfg(test)]
+	type Kusama = kusama_runtime::Runtime;
+	#[cfg(test)]
+	type Polkadot = polkadot_runtime::Runtime;
+	#[cfg(test)]
+	type DealWithFees = polkadot_runtime_common::impls::DealWithFees<Polkadot>;
+	#[cfg(test)]
+	type WeightToFee = polkadot_runtime_constants::WeightToFee;
+	#[cfg(test)]
+	type ConstantMultiplier =
+		sp_weights::ConstantMultiplier<super::Balances, polkadot_runtime::TransactionByteFee>;
+	#[cfg(test)]
+	type SlowAdjustingFeeUpdate = polkadot_runtime_common::SlowAdjustingFeeUpdate<Polkadot>;
+}
 
 impl pallet_transaction_payment::Config for Runtime {
 	/// The overarching event type.
 	type RuntimeEvent = RuntimeEvent;
 	/// Handler for withdrawing, refunding and depositing the transaction fee.
 	// LS: Handler for withdrawal (pre-dispatch), correct and deposit (post-dispatch) of tx fees
-	// LS: Balances pallet for fee payment using native token, no handler for 'OnUnbalanced
+	// LS: No handler for OnUnbalanced so fees burned, DOT/KSM use DealWithFees<Runtime> 80/20 split
 	type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
 	/// A fee multiplier for `Operational` extrinsics to compute "virtual tip" to boost `priority`
-	// LS: multiplier to prioritise operational extrinsics - why not max?
+	// LS: multiplier to prioritise operational extrinsics
 	// LS: virtual_tip = final_fee * operational_fee_multiplier
 	type OperationalFeeMultiplier = ConstU8<5>;
 	/// Convert a weight value into a deductible fee based on the currency type.
-	type WeightToFee = IdentityFee<Balance>; // LS: IdentifyFee -> one unit of weight = one unit of fee
+	// LS: IdentifyFee -> one unit of weight = one unit of fee, DOT/KSM use WeightToFee
+	type WeightToFee = IdentityFee<Balance>;
 	/// Convert a length value into a deductible fee based on the currency type.
-	// LS: tx length
+	// LS: tx length, DOT/KSM use ConstantMultiplier<Balance, TransactionByteFee>
 	type LengthToFee = IdentityFee<Balance>;
 	/// Update the multiplier of the next block, based on the previous block's weight.
-	// LS: Block fee multiplier
+	// LS: Block fee multiplier, DOT/KSM use SlowAdjustingFeeUpdate<Self>
 	type FeeMultiplierUpdate = ConstFeeMultiplier<FeeMultiplier>;
 }
 
+// LS: implemented within Statemint/e
 impl pallet_asset_tx_payment::Config for Runtime {
 	/// The overarching event type.
 	type RuntimeEvent = RuntimeEvent;
@@ -79,10 +98,10 @@ mod code_walkthrough {
 		type TxPaymentEvent = pallet_transaction_payment::pallet::Event<Runtime>;
 
 		// LS: RPC API
-		let unsigned_extrinsic = XT::new(TRANSFER, None);
+		let extrinsic = XT::new(TRANSFER, None);
 		// LS: query *predicted* weight, class, inclusion fee (based on extrinsic weight attribute)
-		let dispatch_info = TxPayment::query_info(unsigned_extrinsic.clone(), len as u32).into();
-		let _fee_details = TxPayment::query_fee_details(unsigned_extrinsic, len as u32);
+		let dispatch_info = TxPayment::query_info(extrinsic.clone(), len as u32).into();
+		let _fee_details = TxPayment::query_fee_details(extrinsic, len as u32);
 		// LS: *call* variants always include all fees, above only if extrinsic signed
 		let _ = TxPayment::query_call_info(TRANSFER, len as u32);
 		let _ = TxPayment::query_call_fee_details(TRANSFER, len as u32);
