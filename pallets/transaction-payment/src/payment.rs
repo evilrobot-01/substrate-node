@@ -22,19 +22,13 @@ type NegativeImbalanceOf<C, T> =
 /// Handle withdrawing, refunding and depositing of transaction fees.
 pub trait OnChargeTransaction<T: Config> {
 	/// The underlying integer type in which fees are calculated.
-	type Balance: AtLeast32BitUnsigned
-		+ FullCodec
-		+ Copy
-		+ MaybeSerializeDeserialize
-		+ Debug
-		+ Default
-		+ scale_info::TypeInfo;
+	type Balance: AtLeast32BitUnsigned + FullCodec + Copy + MaybeSerializeDeserialize + Debug + Default + scale_info::TypeInfo;
 	type LiquidityInfo: Default;
 
-	/// Before the transaction is executed the payment of the transaction fees
-	/// need to be secured.
+	/// Before the transaction is executed the payment of the transaction fees need to be secured.
 	///
 	/// Note: The `fee` already includes the `tip`.
+	// LS: pre-dispatch
 	fn withdraw_fee(
 		who: &T::AccountId,
 		call: &T::RuntimeCall,
@@ -44,10 +38,10 @@ pub trait OnChargeTransaction<T: Config> {
 	) -> Result<Self::LiquidityInfo, TransactionValidityError>;
 
 	/// After the transaction was executed the actual fee can be calculated.
-	/// This function should refund any overpaid fees and optionally deposit
-	/// the corrected amount.
+	/// This function should refund any overpaid fees and optionally deposit the corrected amount.
 	///
 	/// Note: The `fee` already includes the `tip`.
+	// LS: post-dispatch
 	fn correct_and_deposit_fee(
 		who: &T::AccountId,
 		dispatch_info: &DispatchInfoOf<T::RuntimeCall>,
@@ -90,17 +84,14 @@ where
 	///
 	/// Note: The `fee` already includes the `tip`.
 	// LS: 'pre-dispatch'
-	fn withdraw_fee(
-		who: &T::AccountId,
-		_call: &T::RuntimeCall,
-		_info: &DispatchInfoOf<T::RuntimeCall>,
-		fee: Self::Balance,
-		tip: Self::Balance,
+	fn withdraw_fee(who: &T::AccountId, _call: &T::RuntimeCall, _info: &DispatchInfoOf<T::RuntimeCall>,
+		fee: Self::Balance, tip: Self::Balance,
 	) -> Result<Self::LiquidityInfo, TransactionValidityError> {
 		if fee.is_zero() {
 			return Ok(None)
 		}
 
+		// LS: determine withdrawal reason(s)
 		let withdraw_reason = if tip.is_zero() {
 			WithdrawReasons::TRANSACTION_PAYMENT
 		} else {
@@ -120,16 +111,12 @@ where
 	///
 	/// Note: The `corrected_fee` already includes the `tip`.
 	// LS: 'post-dispatch'
-	fn correct_and_deposit_fee(
-		who: &T::AccountId,
-		_dispatch_info: &DispatchInfoOf<T::RuntimeCall>,
-		_post_info: &PostDispatchInfoOf<T::RuntimeCall>,
-		corrected_fee: Self::Balance,
-		tip: Self::Balance,
-		already_withdrawn: Self::LiquidityInfo,
+	fn correct_and_deposit_fee(who: &T::AccountId, _dispatch_info: &DispatchInfoOf<T::RuntimeCall>,
+		_post_info: &PostDispatchInfoOf<T::RuntimeCall>, corrected_fee: Self::Balance,
+		tip: Self::Balance, already_withdrawn: Self::LiquidityInfo,
 	) -> Result<(), TransactionValidityError> {
-		// LS: calculate correct fees and refund as necessary
 		if let Some(paid) = already_withdrawn {
+			// LS: calculate refund as necessary
 			// Calculate how much refund we should return
 			let refund_amount = paid.peek().saturating_sub(corrected_fee);
 			// refund to the the account that paid the fees. If this fails, the
@@ -144,7 +131,7 @@ where
 				.map_err(|_| TransactionValidityError::Invalid(InvalidTransaction::Payment))?;
 			// Call someone else to handle the imbalance (fee and tip separately)
 			let (tip, fee) = adjusted_paid.split(tip);
-			// LS: pass set of imbalances to OnUnbalanced handler for processing
+			// LS: pass fee/tip to OnUnbalanced handler for processing
 			OU::on_unbalanceds(Some(fee).into_iter().chain(Some(tip)));
 		}
 		Ok(())

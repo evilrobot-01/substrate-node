@@ -272,7 +272,9 @@ where
 	) -> Result<(), TransactionValidityError> {
 		if let Some((tip, who, initial_payment, asset_id)) = pre {
 			match initial_payment {
+				// LS: native token
 				InitialPayment::Native(already_withdrawn) => {
+					// LS: use Transaction Payment pallet
 					pallet_transaction_payment::ChargeTransactionPayment::<T>::post_dispatch(
 						Some((tip, who, already_withdrawn)),
 						info,
@@ -281,6 +283,7 @@ where
 						result,
 					)?;
 				},
+				// LS: asset
 				InitialPayment::Asset(already_withdrawn) => {
 					let actual_fee = pallet_transaction_payment::Pallet::<T>::compute_actual_fee(
 						len as u32, info, post_info, tip,

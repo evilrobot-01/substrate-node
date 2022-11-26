@@ -3962,6 +3962,8 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api 4.0.0-dev",
  "parity-scale-codec",
  "polkadot-runtime",
+ "polkadot-runtime-common",
+ "polkadot-runtime-constants",
  "scale-info",
  "sp-api",
  "sp-block-builder",
@@ -3974,6 +3976,7 @@ dependencies = [
  "sp-std",
  "sp-transaction-pool",
  "sp-version",
+ "sp-weights",
  "substrate-wasm-builder",
 ]
 

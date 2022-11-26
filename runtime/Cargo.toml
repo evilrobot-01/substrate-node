@@ -57,9 +57,9 @@ substrate-wasm-builder = { version = "5.0.0-dev", git = "https://github.com/pari
 [dev-dependencies]
 kusama-runtime = { version = "0.9.32", git = "https://github.com/paritytech/polkadot.git", branch = "release-v0.9.32" }
 polkadot-runtime = { version = "0.9.32", git = "https://github.com/paritytech/polkadot.git", branch = "release-v0.9.32" }
-#polkadot-runtime-common = { version = "0.9.32", git = "https://github.com/paritytech/polkadot.git", branch = "release-v0.9.32" }
-#polkadot-runtime-constants = { version = "0.9.32", git = "https://github.com/paritytech/polkadot.git", branch = "release-v0.9.32" }
-#sp-weights = { version = "4.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.32" }
+polkadot-runtime-common = { version = "0.9.32", git = "https://github.com/paritytech/polkadot.git", branch = "release-v0.9.32" }
+polkadot-runtime-constants = { version = "0.9.32", git = "https://github.com/paritytech/polkadot.git", branch = "release-v0.9.32" }
+sp-weights = { version = "4.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.32" }
 
 [features]
 default = ["std"]

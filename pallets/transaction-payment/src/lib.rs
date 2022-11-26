@@ -340,6 +340,7 @@ pub mod pallet {
 		type FeeMultiplierUpdate: MultiplierUpdate;
 	}
 
+	// LS: default value of 1 when empty
 	#[pallet::type_value]
 	pub fn NextFeeMultiplierOnEmpty() -> Multiplier {
 		MULTIPLIER_DEFAULT_VALUE
@@ -459,15 +460,16 @@ where
 	where
 		T::RuntimeCall: Dispatchable<Info = DispatchInfo>,
 	{
-		// NOTE: we can actually make it understand `ChargeTransactionPayment`, but would be some
+		// NOTE : we can actually make it understand `ChargeTransactionPayment`, but would be some
 		// hassle for sure. We have to make it aware of the index of `ChargeTransactionPayment` in
 		// `Extra`. Alternatively, we could actually execute the tx's per-dispatch and record the
 		// balance of the sender before and after the pipeline.. but this is way too much hassle for
 		// a very very little potential gain in the future.
 		let dispatch_info = <Extrinsic as GetDispatchInfo>::get_dispatch_info(&unchecked_extrinsic);
 
-		// LS: compute fee for signed extrinsics only
+		// LS: compute inclusion fee for signed extrinsics only
 		let partial_fee = if unchecked_extrinsic.is_signed().unwrap_or(false) {
+			// LS: fee computation
 			Self::compute_fee(len, &dispatch_info, 0u32.into())
 		} else {
 			// Unsigned extrinsics have no partial fee.
@@ -491,6 +493,7 @@ where
 
 		let tip = 0u32.into();
 
+		// LS: compute inclusion fee for signed extrinsics only
 		if unchecked_extrinsic.is_signed().unwrap_or(false) {
 			Self::compute_fee_details(len, &dispatch_info, tip)
 		} else {
@@ -584,24 +587,28 @@ where
 		)
 	}
 
-	fn compute_fee_raw(
-		len: u32,
-		weight: Weight,
-		tip: BalanceOf<T>,
-		pays_fee: Pays,
-		class: DispatchClass,
-	) -> FeeDetails<BalanceOf<T>> {
+	// LS: fee computation
+	fn compute_fee_raw(len: u32, weight: Weight, tip: BalanceOf<T>, pays_fee: Pays, class: DispatchClass)
+		-> FeeDetails<BalanceOf<T>>
+	{
 		if pays_fee == Pays::Yes {
+			// LS: create fee from weight
 			// the adjustable part of the fee.
 			let unadjusted_weight_fee = Self::weight_to_fee(weight);
+
+			// LS: adjust based on block fee multiplier
 			let multiplier = Self::next_fee_multiplier();
 			// final adjusted weight fee.
 			let adjusted_weight_fee = multiplier.saturating_mul_int(unadjusted_weight_fee);
 
+			// LS: calculate (transaction) length fee
 			// length fee. this is adjusted via `LengthToFee`.
 			let len_fee = Self::length_to_fee(len);
 
+			// LS: calculate base fee based on extrinsic class
 			let base_fee = Self::weight_to_fee(T::BlockWeights::get().get(class).base_extrinsic);
+
+			// LS: return fee details with inclusion fee
 			FeeDetails {
 				inclusion_fee: Some(InclusionFee { base_fee, len_fee, adjusted_weight_fee }),
 				tip,
@@ -675,15 +682,13 @@ where
 		info: &DispatchInfoOf<T::RuntimeCall>,
 		len: usize,
 	) -> Result<
-		(
-			BalanceOf<T>,
-			<<T as Config>::OnChargeTransaction as OnChargeTransaction<T>>::LiquidityInfo,
-		),
-		TransactionValidityError,
-	> {
+		(BalanceOf<T>,<<T as Config>::OnChargeTransaction as OnChargeTransaction<T>>::LiquidityInfo),
+		TransactionValidityError>
+	{
 		let tip = self.0;
 		let fee = Pallet::<T>::compute_fee(len as u32, info, tip);
 
+		// LS: withdraw fee via OnChargeTransaction handler
 		<<T as Config>::OnChargeTransaction as OnChargeTransaction<T>>::withdraw_fee(
 			who, call, info, fee, tip,
 		)
@@ -821,6 +826,7 @@ where
 	) -> Result<Self::Pre, TransactionValidityError> {
 		// LS: withdraw fees prior to dispatch, calling OnChargeTransaction to handle withdrawal
 		let (_fee, imbalance) = self.withdraw_fee(who, call, info, len)?;
+
 		// LS: result returned for passing to post-dispatch to calculate any refund
 		Ok((self.0, who.clone(), imbalance))
 	}
@@ -834,7 +840,10 @@ where
 	) -> Result<(), TransactionValidityError> {
 		// LS: correct fees from those charged in pre-dispatch to actual charged from post_info
 		if let Some((tip, who, imbalance)) = maybe_pre {
+			// LS: compute actual fee
 			let actual_fee = Pallet::<T>::compute_actual_fee(len as u32, info, post_info, tip);
+
+			// LS: correct and deposit fee
 			T::OnChargeTransaction::correct_and_deposit_fee(
 				&who, info, post_info, actual_fee, tip, imbalance,
 			)?;

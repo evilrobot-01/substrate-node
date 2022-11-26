@@ -6,6 +6,9 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+#[cfg(test)]
+mod learning_session;
+
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -26,6 +29,7 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 // A few exports that help ease life for downstream crates.
+use frame_support::traits::fungibles::{Balanced, CreditOf};
 pub use frame_support::{
 	construct_runtime, parameter_types,
 	traits::{
@@ -38,12 +42,17 @@ pub use frame_support::{
 	StorageValue,
 };
 pub use frame_system::Call as SystemCall;
+use frame_system::EnsureRoot;
+use pallet_asset_tx_payment::HandleCredit;
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::{ConstFeeMultiplier, CurrencyAdapter, Multiplier};
+use sp_core::crypto::AccountId32;
+use sp_runtime::traits::ConvertInto;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
+use sp_std::marker::PhantomData;
 
 /// Import the transaction payment pallet.
 pub use pallet_transaction_payment;
@@ -264,7 +273,79 @@ impl pallet_sudo::Config for Runtime {
 }
 
 /// Configure the pallets
-mod config;
+impl pallet_transaction_payment::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+
+	type OperationalFeeMultiplier = ConstU8<5>;
+	type WeightToFee = IdentityFee<Balance>;
+	type LengthToFee = IdentityFee<Balance>;
+	type FeeMultiplierUpdate = ConstFeeMultiplier<FeeMultiplier>;
+	type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
+}
+
+parameter_types! {
+	pub const AssetDeposit: Balance = UNITS / 10; // 1 / 10 WND deposit to create asset
+	pub const AssetAccountDeposit: Balance = deposit(1, 16);
+	pub const ApprovalDeposit: Balance = EXISTENTIAL_DEPOSIT;
+	pub const AssetsStringLimit: u32 = 50;
+	pub const MetadataDepositBase: Balance = deposit(1, 68);
+	pub const MetadataDepositPerByte: Balance = deposit(0, 1);
+}
+
+pub const UNITS: Balance = 1_000_000_000_000;
+pub const CENTS: Balance = UNITS / 100;
+pub const MILLICENTS: Balance = CENTS / 1_000;
+
+pub const fn deposit(items: u32, bytes: u32) -> Balance {
+	items as Balance * 100 * CENTS + (bytes as Balance) * 5 * MILLICENTS
+}
+
+pub type AccountIdOf<R> = <R as frame_system::Config>::AccountId;
+
+/// A `HandleCredit` implementation that naively transfers the fees to the block author.
+/// Will drop and burn the assets in case the transfer fails.
+pub struct AssetsToBlockAuthor<R>(PhantomData<R>);
+impl<R> HandleCredit<AccountIdOf<R>, pallet_assets::Pallet<R>> for AssetsToBlockAuthor<R>
+where
+	R: pallet_assets::Config,
+	AccountIdOf<R>: From<AccountId> + Into<AccountId>,
+{
+	fn handle_credit(credit: CreditOf<AccountIdOf<R>, pallet_assets::Pallet<R>>) {
+		// In case of error: Will drop the result triggering the `OnDrop` of the imbalance.
+		let ferdie = [
+			28, 189, 45, 67, 83, 10, 68, 112, 90, 208, 136, 175, 49, 62, 24, 248, 11, 83, 239, 22,
+			179, 97, 119, 205, 75, 119, 184, 70, 242, 165, 240, 124,
+		];
+		let author = AccountIdOf::<R>::from(AccountId32::try_from(ferdie.as_slice()).unwrap());
+		let _ = pallet_assets::Pallet::<R>::resolve(&author, credit);
+	}
+}
+
+impl pallet_assets::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Balance = Balance;
+	type AssetId = u32;
+	type Currency = Balances;
+	type ForceOrigin = EnsureRoot<AccountId>;
+	type AssetDeposit = AssetDeposit;
+	type AssetAccountDeposit = AssetAccountDeposit;
+	type MetadataDepositBase = MetadataDepositBase;
+	type MetadataDepositPerByte = MetadataDepositPerByte;
+	type ApprovalDeposit = ApprovalDeposit;
+	type StringLimit = AssetsStringLimit;
+	type Freezer = ();
+	type Extra = ();
+	type WeightInfo = pallet_assets::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_asset_tx_payment::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Fungibles = Assets;
+	type OnChargeAssetTransaction = pallet_asset_tx_payment::FungiblesAdapter<
+		pallet_assets::BalanceToAssetBalance<Balances, Runtime, ConvertInto>,
+		AssetsToBlockAuthor<Runtime>,
+	>;
+}
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
